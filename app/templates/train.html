@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Train Model - ToF Classifier{% endblock %}
+
+{% block content %}
+<div class="train-page">
+    <h1>Train Classification Model</h1>
+
+    <div class="main-grid">
+        <div class="training-config">
+            <h2>Training Configuration</h2>
+
+            <div class="form-group">
+                <label>Select Training Data:</label>
+                <div id="data-selector" class="data-selector">
+                    <!-- Checkboxes for sample selection will be rendered here -->
+                </div>
+                <button id="select-all-btn" class="btn btn-small">Select All</button>
+                <button id="deselect-all-btn" class="btn btn-small">Deselect All</button>
+            </div>
+
+            <hr>
+
+            <div class="form-group">
+                <label>Epochs:</label>
+                <input type="number" id="epochs" value="20" min="1" max="1000">
+            </div>
+
+            <div class="form-group">
+                <label>Batch Size:</label>
+                <input type="number" id="batch-size" value="16" min="1" max="256">
+            </div>
+
+            <div class="form-group">
+                <label>Learning Rate:</label>
+                <input type="number" id="learning-rate" value="0.001" min="0.00001" max="0.1" step="0.00001">
+            </div>
+
+            <div class="form-group">
+                <label>Validation Split:</label>
+                <input type="range" id="val-split" value="0.2" min="0" max="0.5" step="0.05">
+                <span id="val-split-display">20%</span>
+            </div>
+
+            <button id="train-btn" class="btn btn-primary btn-large">
+                🤖 Start Training
+            </button>
+        </div>
+
+        <div class="training-monitor">
+            <h2>Training Progress</h2>
+            
+            <div id="training-status" class="status hidden">
+                <p id="status-message">Waiting to start...</p>
+                <div class="progress-bar">
+                    <div id="progress-fill" class="progress-fill"></div>
+                </div>
+                <button id="cancel-btn" class="btn btn-danger">Cancel</button>
+            </div>
+
+            <h3>Training History</h3>
+            <canvas id="history-chart" width="400" height="300"></canvas>
+
+            <h3>Model Info</h3>
+            <div id="model-info" class="model-info">
+                <p class="placeholder">No model trained yet</p>
+            </div>
+        </div>
+    </div>
+
+    <hr>
+
+    <div class="saved-models">
+        <h2>Saved Models</h2>
+        <div id="models-list" class="models-list">
+            <p class="placeholder">Loading...</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        setupEventListeners();
+        loadAvailableData();
+        loadSavedModels();
+    });
+
+    function setupEventListeners() {
+        document.getElementById('train-btn').addEventListener('click', startTraining);
+        document.getElementById('select-all-btn').addEventListener('click', selectAllData);
+        document.getElementById('deselect-all-btn').addEventListener('click', deselectAllData);
+        
+        document.getElementById('val-split').addEventListener('input', (e) => {
+            document.getElementById('val-split-display').textContent = (e.target.value * 100).toFixed(0) + '%';
+        });
+    }
+
+    async function loadAvailableData() {
+        try {
+            const response = await fetch('/api/snapshot/list');
+            const snapshots = await response.json();
+
+            const container = document.getElementById('data-selector');
+            let html = '';
+
+            for (const [label, files] of Object.entries(snapshots)) {
+                html += `<div class="label-group">
+                    <h4>${label} (${files.length})</h4>`;
+                for (const file of files) {
+                    const key = `${label}/${file}`;
+                    html += `
+                        <label class="checkbox-item">
+                            <input type="checkbox" class="data-checkbox" value="${key}">
+                            ${file}
+                        </label>
+                    `;
+                }
+                html += '</div>';
+            }
+
+            if (html === '') {
+                html = '<p class="placeholder">No data available. Collect some samples first.</p>';
+            }
+
+            container.innerHTML = html;
+            document.getElementById('train-btn').disabled = (Object.keys(snapshots).length === 0);
+        } catch (error) {
+            console.error('Error loading data:', error);
+        }
+    }
+
+    function selectAllData() {
+        document.querySelectorAll('.data-checkbox').forEach(cb => cb.checked = true);
+    }
+
+    function deselectAllData() {
+        document.querySelectorAll('.data-checkbox').forEach(cb => cb.checked = false);
+    }
+
+    async function startTraining() {
+        const selected = Array.from(document.querySelectorAll('.data-checkbox:checked'))
+            .map(cb => cb.value);
+
+        if (selected.length === 0) {
+            alert('Please select at least one data sample');
+            return;
+        }
+
+        const config = {
+            snapshots: selected,
+            epochs: parseInt(document.getElementById('epochs').value),
+            batch_size: parseInt(document.getElementById('batch-size').value),
+            learning_rate: parseFloat(document.getElementById('learning-rate').value),
+            val_split: parseFloat(document.getElementById('val-split').value)
+        };
+
+        try {
+            document.getElementById('training-status').classList.remove('hidden');
+            document.getElementById('status-message').textContent = 'Starting training...';
+            document.getElementById('train-btn').disabled = true;
+
+            const response = await fetch('/api/train/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(config)
+            });
+
+            if (!response.ok) throw new Error('Training failed to start');
+
+            // Poll for training status
+            pollTrainingStatus();
+        } catch (error) {
+            alert('Error: ' + error.message);
+            document.getElementById('training-status').classList.add('hidden');
+            document.getElementById('train-btn').disabled = false;
+        }
+    }
+
+    function pollTrainingStatus() {
+        // TODO: Implement status polling
+        // Would check training progress and update UI
+        setTimeout(() => {
+            document.getElementById('status-message').textContent = 'Training completed!';
+            document.getElementById('progress-fill').style.width = '100%';
+            loadSavedModels();
+            document.getElementById('train-btn').disabled = false;
+        }, 3000);
+    }
+
+    async function loadSavedModels() {
+        try {
+            const response = await fetch('/api/train/list');
+            const data = await response.json();
+            const models = data.models;
+
+            const container = document.getElementById('models-list');
+            if (models.length === 0) {
+                container.innerHTML = '<p class="placeholder">No models trained yet</p>';
+                return;
+            }
+
+            container.innerHTML = models.map(m => `
+                <div class="model-card">
+                    <div class="model-header">
+                        <strong>${m.timestamp}</strong>
+                        <button class="btn-small" onclick="downloadModel('${m.model_file}')">Download</button>
+                    </div>
+                    <div class="model-details">
+                        <p>Accuracy: <strong>${(m.evaluation.accuracy * 100).toFixed(2)}%</strong></p>
+                        <p>Samples: ${m.num_samples} | Epochs: ${m.epochs} | Batch Size: ${m.batch_size}</p>
+                    </div>
+                </div>
+            `).join('');
+        } catch (error) {
+            console.error('Error loading models:', error);
+        }
+    }
+
+    function downloadModel(modelFile) {
+        alert('Download feature not yet implemented');
+        // TODO: Implement download
+    }
+</script>
+{% endblock %}

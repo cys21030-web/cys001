@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - ToF Classifier{% endblock %}
+
+{% block content %}
+<div class="dashboard">
+    <h1>ToF Gesture Classification Dashboard</h1>
+    
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Collected Samples</h3>
+            <p class="stat-value" id="sample-count">0</p>
+        </div>
+        <div class="stat-card">
+            <h3>Trained Models</h3>
+            <p class="stat-value" id="model-count">0</p>
+        </div>
+        <div class="stat-card">
+            <h3>Inference Sessions</h3>
+            <p class="stat-value" id="inference-count">0</p>
+        </div>
+    </div>
+
+    <div class="actions-grid">
+        <a href="/collect" class="action-card">
+            <h2>📊 Collect Data</h2>
+            <p>Capture and save ToF sensor snapshots with labels</p>
+        </a>
+        <a href="/train" class="action-card">
+            <h2>🤖 Train Model</h2>
+            <p>Train classifier on collected data</p>
+        </a>
+        <a href="/inference" class="action-card">
+            <h2>🔮 Run Inference</h2>
+            <p>Use trained model for real-time classification</p>
+        </a>
+    </div>
+
+    <div class="recent-section">
+        <h2>Recent Models</h2>
+        <div id="recent-models" class="model-list">
+            <p class="placeholder">No models trained yet</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Load statistics on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        loadStats();
+    });
+
+    async function loadStats() {
+        try {
+            // Load snapshot count
+            const snapshotsResp = await fetch('/api/snapshot/list');
+            const snapshots = await snapshotsResp.json();
+            const totalSamples = Object.values(snapshots).reduce((sum, arr) => sum + arr.length, 0);
+            document.getElementById('sample-count').textContent = totalSamples;
+
+            // Load model count
+            const modelsResp = await fetch('/api/train/list');
+            const models = await modelsResp.json();
+            document.getElementById('model-count').textContent = models.models.length;
+
+            // Display recent models
+            displayRecentModels(models.models.slice(-3));
+        } catch (error) {
+            console.error('Error loading stats:', error);
+        }
+    }
+
+    function displayRecentModels(models) {
+        const container = document.getElementById('recent-models');
+        if (models.length === 0) {
+            container.innerHTML = '<p class="placeholder">No models trained yet</p>';
+            return;
+        }
+        
+        container.innerHTML = models.map(m => `
+            <div class="model-item">
+                <strong>${m.timestamp}</strong>
+                <p>Accuracy: ${(m.evaluation.accuracy * 100).toFixed(2)}%</p>
+                <p>Samples: ${m.num_samples}</p>
+            </div>
+        `).join('');
+    }
+</script>
+{% endblock %}
