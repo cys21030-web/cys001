@@ -11,7 +11,7 @@ import random
 from AppBase import App as AppBase
 
 
-class App(AppBase):
+class CollectorApp(AppBase):
     def __init__(self):
         super().__init__()
         self.tof_sensor = ToFSensor()
@@ -135,7 +135,7 @@ class App(AppBase):
         now_str = now.strftime("%Y-%m-%d-%H-%M-%S.%f")[:-3]
         label_name = ToFDataLabel.labels[self.input_label].name
         output_name = f'{label_name}-{now_str}'
-        output_dir = self.__snapshot_dir / f'{label_name}'
+        output_dir = self.snapshot_dir / f'{label_name}'
 
         if not output_dir.exists():
             output_dir.mkdir(parents=True)
@@ -151,11 +151,3 @@ class App(AppBase):
                 for x in range(self.raw_data.shape[1]):
                     f.write(f'{self.raw_data[y, x]:0.3f} ')
                 f.write('\n')
-
-
-def main():
-    app = App()
-    app.run()
-
-if __name__ == '__main__':
-    main()

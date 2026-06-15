@@ -13,11 +13,19 @@ import random
 class App:
     def __init__(self):
         logging.info("Initializing App")
-        self.ctx_imgui = imgui.create_context()
-        imgui.set_current_context(self.ctx_imgui)
+        self.ctx_imgui = imgui.get_current_context()
+        if self.ctx_imgui is None:
+            self.ctx_imgui = imgui.create_context()
+            imgui.set_current_context(self.ctx_imgui)
 
-        self.ctx_implot = implot.create_context()
-        self.ctx_implot3d = implot3d.create_context()
+        self.ctx_implot = implot.get_current_context()
+        if self.ctx_implot is None:
+            self.ctx_implot = implot.create_context()
+
+        self.ctx_implot3d = implot3d.get_current_context()
+        if self.ctx_implot3d is None:
+            self.ctx_implot3d = implot3d.create_context()
+
         self.plot_box_elvation = 20
         self.plot_box_azimuth = 80
 
@@ -30,7 +38,7 @@ class App:
         self.__sensor_ready = True
         self.__frame_cnt_total = 0
         self.__frame_cnt_valid = 0
-        self.__snapshot_dir = Path('./snapshot')
+        self.snapshot_dir = Path('./snapshot')
 
     @property
     def win_title(self):
@@ -204,39 +212,3 @@ class App:
                 for x in range(self.raw_data.shape[1]):
                     f.write(f'{self.raw_data[y, x]:0.3f} ')
                 f.write('\n')
-
-    def run(self):
-        runner_params = hello_imgui.RunnerParams()
-
-        # 1. Set the GUI rendering callback
-        runner_params.callbacks.show_gui = self.gui
-
-        # 2. Set the window title
-        runner_params.app_window_params.window_title = self.__win_title
-
-        # 3. Set the initial window size
-        runner_params.app_window_params.window_geometry.size = (1280, 960)
-
-        # 4. Enable restoring the previous window geometry (size and position)
-        runner_params.app_window_params.restore_previous_geometry = True
-        
-        runner_params.callbacks.load_additional_fonts = self.load_custom_fonts
-
-        runner_params.imgui_window_params.default_imgui_window_type = (
-            hello_imgui.DefaultImGuiWindowType.provide_full_screen_dock_space
-        )
-
-        runner_params.docking_params = self.config_docking()
-        runner_params.fps_idling.fps_max = 20.0          # Set a maximum frame rate limit
-        runner_params.fps_idling.vsync_to_monitor = True  # Synchronize with your monitor's refresh rate
-
-        # Run the application with the configured parameters
-        hello_imgui.run(runner_params)
-
-
-def main():
-    app = App()
-    app.run()
-
-if __name__ == '__main__':
-    main()
