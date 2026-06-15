@@ -144,16 +144,21 @@ class TrainingApp(AppBase):
                     self.run_training_loop(train_samples, test_samples, timestamp)
 
     def run_training_loop(self, train_samples, test_samples, timestamp):
+        print(f"[Trace] Starting run_training_loop with {len(train_samples)} train and {len(test_samples)} test samples.")
         from torch import nn
         from torch.utils.data import DataLoader
         from training.dataset import ToFDataset
         from ai.ToFTrainer import ToFClassifierModel
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"[Trace] Selected device: {device}")
+        
+        print("[Trace] Instantiating ToFClassifierModel...")
         model = ToFClassifierModel().to(device)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         
+        print("[Trace] Loading datasets...")
         train_dataset = ToFDataset(train_samples)
         test_dataset = ToFDataset(test_samples)
         
@@ -172,6 +177,7 @@ class TrainingApp(AppBase):
         
         self.current_epoch = 0
         
+        print(f"[Trace] Commencing {self.epochs} training epochs...")
         for epoch in range(1, self.epochs + 1):
             model.train()
             epoch_loss = 0.0
@@ -233,8 +239,9 @@ class TrainingApp(AppBase):
                 self.final_w3 = w3
                 
             self.current_epoch = epoch
+            print(f"[Trace] Epoch {epoch} completed: loss={train_loss:.4f}, val_loss={val_loss:.4f}, acc={train_acc:.4f}, val_acc={val_acc:.4f}")
             
-        # Store these as persistent numpy arrays so their memory is alive and never deallocated during rendering!
+        print("[Trace] Storing persistent arrays for ImPlot rendering...")
         self.plot_epochs_indices = np.array(range(1, len(self.train_losses) + 1), dtype=np.float32)
         self.plot_train_losses = np.array(self.train_losses, dtype=np.float32)
         self.plot_test_losses = np.array(self.test_losses, dtype=np.float32)
@@ -244,8 +251,10 @@ class TrainingApp(AppBase):
         self.plot_layer1 = np.array(self.layer_weights["Layer 1"], dtype=np.float32)
         self.plot_layer2 = np.array(self.layer_weights["Layer 2"], dtype=np.float32)
         self.plot_layer3 = np.array(self.layer_weights["Layer 3"], dtype=np.float32)
+        print("[Trace] Persistent plotting arrays created successfully.")
 
         # Save model and output YAML
+        print("[Trace] Saving PyTorch checkpoint (.pth)...")
         models_dir = Path('./models')
         models_dir.mkdir(parents=True, exist_ok=True)
         
@@ -256,8 +265,10 @@ class TrainingApp(AppBase):
             "state_dict": model.state_dict(),
         }
         torch.save(payload, model_path)
+        print(f"[Trace] Checkpoint saved to: {model_path}")
         
         # Output YAML metadata record
+        print("[Trace] Saving YAML metadata (.yaml)...")
         yaml_path = models_dir / f"model_{timestamp}.yaml"
         yaml_data = {
             "timestamp": timestamp,
@@ -274,12 +285,19 @@ class TrainingApp(AppBase):
         
         with open(yaml_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(yaml_data, f, default_flow_style=False, allow_unicode=True)
+        print(f"[Trace] YAML metadata saved to: {yaml_path}")
             
         logging.info(f"Model and YAML metadata saved successfully.")
         self.is_training = False
+        print("[Trace] run_training_loop successfully exited!")
 
     def gui_training_metrics(self):
+        # Throttle tracing output to only print when self.current_epoch changes
         if self.current_epoch > 0:
+            if not hasattr(self, '_last_gui_trace_epoch') or self._last_gui_trace_epoch != self.current_epoch:
+                self._last_gui_trace_epoch = self.current_epoch
+                print(f"[Trace GUI] Rendering training metrics panel for epoch {self.current_epoch}")
+                
             progress = self.current_epoch / self.epochs if self.epochs > 0 else 0.0
             imgui.text(f"Status: Training Complete (30 / 30 Epochs)")
             imgui.progress_bar(progress, (0.0, 0.0), f"{int(progress * 100)}%")
@@ -292,6 +310,8 @@ class TrainingApp(AppBase):
             selected_metrics, _ = imgui.begin_tab_item("Metrics Plots")
             if selected_metrics:
                 if len(self.plot_train_losses) > 0:
+                    if not hasattr(self, '_last_plot_trace_epoch') or self._last_plot_trace_epoch != self.current_epoch:
+                        print(f"[Trace GUI] Drawing Metrics Plots: self.plot_train_losses.shape = {self.plot_train_losses.shape}")
                     if implot.begin_plot("Loss Rate"):
                         implot.setup_axes("Epoch", "Loss")
                         implot.plot_line("Train Loss", self.plot_epochs_indices, self.plot_train_losses)
@@ -312,6 +332,8 @@ class TrainingApp(AppBase):
             selected_weights, _ = imgui.begin_tab_item("Layer Weights (Epoch Mean)")
             if selected_weights:
                 if len(self.plot_layer1) > 0:
+                    if not hasattr(self, '_last_weight_trace_epoch') or self._last_weight_trace_epoch != self.current_epoch:
+                        print(f"[Trace GUI] Drawing Layer Weight curves: self.plot_layer1.shape = {self.plot_layer1.shape}")
                     if implot.begin_plot("Layer Parameter Weights"):
                         implot.setup_axes("Epoch", "Mean Parameter Weight")
                         implot.plot_line("Layer 1 (64->128)", self.plot_epochs_indices, self.plot_layer1)
@@ -325,6 +347,8 @@ class TrainingApp(AppBase):
             selected_matrices, _ = imgui.begin_tab_item("Weight Matrices")
             if selected_matrices:
                 if self.final_w3 is not None:
+                    if not hasattr(self, '_last_matrix_trace_epoch') or self._last_matrix_trace_epoch != self.current_epoch:
+                        print(f"[Trace GUI] Drawing Weight Heatmap: self.final_w3.shape = {self.final_w3.shape}")
                     imgui.text("Final Dense Layer Weight Matrix (3 Classes x 64 Features)")
                     if implot.begin_plot("Final Layer Weights Heatmap"):
                         implot.setup_legend(implot.Location_.east, implot.LegendFlags_.outside)
@@ -340,6 +364,12 @@ class TrainingApp(AppBase):
                 else:
                     imgui.text("Weight matrix visualization will load when training finishes.")
                 imgui.end_tab_item()
+
+            # Update tracers inside tab bar once per epoch
+            if not hasattr(self, '_last_plot_trace_epoch') or self._last_plot_trace_epoch != self.current_epoch:
+                self._last_plot_trace_epoch = self.current_epoch
+                self._last_weight_trace_epoch = self.current_epoch
+                self._last_matrix_trace_epoch = self.current_epoch
 
             imgui.end_tab_bar()
 
