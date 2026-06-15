@@ -168,25 +168,54 @@ class InferenceApp(AppBase):
         elif self.probabilities is None:
             imgui.text("Awaiting live sensor stream...")
         else:
+            # Pair each label with its confidence value and index
+            labeled_probs = [
+                (lbl.name, self.probabilities[lbl.index], lbl.index)
+                for lbl in ToFDataLabel.labels
+            ]
+            # Sort in descending order of confidence score
+            labeled_probs.sort(key=lambda x: x[1], reverse=True)
+            
+            # Determine if there is an obvious/certain result (threshold set to 70%)
+            threshold = 0.70
+            highest_prob = labeled_probs[0][1]
+            has_obvious_result = highest_prob >= threshold
+            
             pred_label = ToFDataLabel.labels[self.predicted_label_idx].name
             imgui.text_disabled("Detected State:")
             imgui.same_line()
             
-            # Highlight state with clear indicators
-            if self.predicted_label_idx == 0:
-                imgui.text_colored((0.0, 1.0, 0.0, 1.0), f"{pred_label} (Normal)")
-            elif self.predicted_label_idx == 1:
-                imgui.text_colored((1.0, 0.8, 0.0, 1.0), f"{pred_label} (Upstairs)")
+            if has_obvious_result:
+                if self.predicted_label_idx == 0:
+                    imgui.text_colored((0.0, 1.0, 0.0, 1.0), f"{pred_label} (Normal)")
+                elif self.predicted_label_idx == 1:
+                    imgui.text_colored((1.0, 0.8, 0.0, 1.0), f"{pred_label} (Upstairs)")
+                else:
+                    imgui.text_colored((1.0, 0.4, 0.0, 1.0), f"{pred_label} (Downstairs)")
             else:
-                imgui.text_colored((1.0, 0.4, 0.0, 1.0), f"{pred_label} (Downstairs)")
+                imgui.text_colored((0.6, 0.6, 0.6, 1.0), "Uncertain / No Obvious Result")
                 
             imgui.spacing()
             imgui.separator()
             imgui.spacing()
             
-            # Display confidence breakdown
-            for lbl in ToFDataLabel.labels:
-                prob = self.probabilities[lbl.index]
-                imgui.text(f"{lbl.name:<12}")
+            # Display sorted labels and confidence progress bars
+            for rank, (name, prob, idx) in enumerate(labeled_probs):
+                # Set text and progress bar color based on certainty rules
+                if has_obvious_result:
+                    if rank == 0:
+                        text_color = (0.0, 1.0, 0.0, 1.0) # Green for highest
+                        bar_color = (0.0, 1.0, 0.0, 1.0)   # Green for highest
+                    else:
+                        text_color = (0.6, 0.6, 0.6, 1.0) # Grey for others
+                        bar_color = (0.6, 0.6, 0.6, 1.0)   # Grey for others
+                else:
+                    text_color = (0.6, 0.6, 0.6, 1.0)     # Grey for all
+                    bar_color = (0.6, 0.6, 0.6, 1.0)       # Grey for all
+                
+                imgui.text_colored(text_color, f"{name:<12}")
                 imgui.same_line()
+                
+                imgui.push_style_color(imgui.Col_.plot_histogram, bar_color)
                 imgui.progress_bar(prob, (0.0, 0.0), f"{int(prob * 100)}%")
+                imgui.pop_style_color()
