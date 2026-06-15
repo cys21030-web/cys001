@@ -1,20 +1,24 @@
 import threading
 import logging
+import time
+import random
+import yaml
+from datetime import datetime
 from pathlib import Path
+from collections import deque
+import numpy as np
+
+import torch
 from imgui_bundle import imgui, hello_imgui, implot, implot3d
 
 from ai.ToFDataLabel import ToFDataLabel
-
 from common.ToFData import ToFData
 from common.ViewAngle import ViewAngle
 from common.WorldCoord import WorldCoord
 
 from AppBase import App as AppBase
-from collections import deque
-
 from training import ToFSample, ToFDataset, ToFDataLoader
 
-    
 
 class TrainingApp(AppBase):
     def __init__(self):
@@ -24,6 +28,25 @@ class TrainingApp(AppBase):
         self.selected_item = None
 
         self.samples = {}
+        
+        # New training state variables
+        self.is_training = False
+        self.train_test_split_perc = 50.0
+        self.current_epoch = 0
+        self.epochs = 30
+        self.train_losses = []
+        self.test_losses = []
+        self.train_accuracies = []
+        self.test_accuracies = []
+        self.layer_weights = {
+            "Layer 1": [],
+            "Layer 2": [],
+            "Layer 3": []
+        }
+        self.final_w1 = None
+        self.final_w2 = None
+        self.final_w3 = None
+
         threading.Thread(
             target=self.data_pre_scan,
             daemon=True
@@ -59,6 +82,256 @@ class TrainingApp(AppBase):
                         imgui.tree_pop()
             imgui.tree_pop()
 
+        # Add Training Split Slider and Button
+        imgui.separator_text('Training Control')
+        if self.is_training:
+            imgui.begin_disabled()
+            imgui.slider_float('Train Split (%)', self.train_test_split_perc, 10.0, 90.0, "%.1f")
+            imgui.button('Training In Progress...')
+            imgui.end_disabled()
+        else:
+            changed, self.train_test_split_perc = imgui.slider_float('Train Split (%)', self.train_test_split_perc, 10.0, 90.0, "%.1f")
+            
+            # Check if there are any samples loaded
+            total_samples_loaded = sum(len(deque) for deque in self.samples.values()) if self.samples else 0
+            if total_samples_loaded == 0:
+                imgui.begin_disabled()
+                imgui.button('No Loaded Samples')
+                imgui.end_disabled()
+            else:
+                if imgui.button('Start Training'):
+                    # Start training
+                    self.is_training = True
+                    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                    
+                    # Gather all loaded samples
+                    all_samples = []
+                    for lbl_name, sample_deque in self.samples.items():
+                        all_samples.extend(list(sample_deque))
+                        
+                    # Split
+                    samples_by_label = {}
+                    for s in all_samples:
+                        samples_by_label.setdefault(s.label, [])
+                        samples_by_label[s.label].append(s)
+                        
+                    train_samples = []
+                    test_samples = []
+                    split_perc = self.train_test_split_perc / 100.0
+                    
+                    for label, samples_list in samples_by_label.items():
+                        shuffled = list(samples_list)
+                        random.shuffle(shuffled)
+                        split_idx = max(1, int(len(shuffled) * split_perc)) # Ensure at least 1 training sample
+                        train_samples.extend(shuffled[:split_idx])
+                        test_samples.extend(shuffled[split_idx:])
+                        
+                    # Fallback if split is empty
+                    if not train_samples and all_samples:
+                        train_samples.append(all_samples[0])
+                        test_samples = all_samples[1:]
+                        
+                    self.training_thread = threading.Thread(
+                        target=self.run_training_loop,
+                        args=(train_samples, test_samples, timestamp),
+                        daemon=True
+                    )
+                    self.training_thread.start()
+
+    def run_training_loop(self, train_samples, test_samples, timestamp):
+        from torch import nn
+        from torch.utils.data import DataLoader
+        from training.dataset import ToFDataset
+        from ai.ToFTrainer import ToFClassifierModel
+        
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model = ToFClassifierModel().to(device)
+        criterion = nn.CrossEntropyLoss()
+        optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+        
+        train_dataset = ToFDataset(train_samples)
+        test_dataset = ToFDataset(test_samples)
+        
+        train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+        test_loader = DataLoader(test_dataset, batch_size=16, shuffle=False)
+        
+        self.train_losses = []
+        self.test_losses = []
+        self.train_accuracies = []
+        self.test_accuracies = []
+        self.layer_weights = {
+            "Layer 1": [],
+            "Layer 2": [],
+            "Layer 3": []
+        }
+        
+        self.current_epoch = 0
+        
+        for epoch in range(1, self.epochs + 1):
+            model.train()
+            epoch_loss = 0.0
+            correct = 0
+            
+            for features, labels in train_loader:
+                # Flat 2D input (8x8) to 1D (64)
+                features = features.to(device).view(features.size(0), -1)
+                labels = labels.to(device)
+                
+                optimizer.zero_grad()
+                logits = model(features)
+                loss = criterion(logits, labels)
+                loss.backward()
+                optimizer.step()
+                
+                epoch_loss += loss.item() * features.size(0)
+                predictions = torch.argmax(logits, dim=1)
+                correct += (predictions == labels).sum().item()
+                
+            train_loss = epoch_loss / len(train_dataset) if len(train_dataset) > 0 else 0.0
+            train_acc = correct / len(train_dataset) if len(train_dataset) > 0 else 0.0
+            
+            # Evaluate on test set
+            model.eval()
+            test_loss = 0.0
+            test_correct = 0
+            with torch.no_grad():
+                for features, labels in test_loader:
+                    features = features.to(device).view(features.size(0), -1)
+                    labels = labels.to(device)
+                    logits = model(features)
+                    loss = criterion(logits, labels)
+                    test_loss += loss.item() * features.size(0)
+                    
+                    predictions = torch.argmax(logits, dim=1)
+                    test_correct += (predictions == labels).sum().item()
+            
+            val_loss = test_loss / len(test_dataset) if len(test_dataset) > 0 else 0.0
+            val_acc = test_correct / len(test_dataset) if len(test_dataset) > 0 else 0.0
+            
+            # Record metrics
+            self.train_losses.append(train_loss)
+            self.test_losses.append(val_loss)
+            self.train_accuracies.append(train_acc)
+            self.test_accuracies.append(val_acc)
+            
+            # Extract weight statistics
+            with torch.no_grad():
+                w1 = model.network[0].weight.cpu().numpy()
+                w2 = model.network[3].weight.cpu().numpy()
+                w3 = model.network[6].weight.cpu().numpy()
+                
+                self.layer_weights["Layer 1"].append(float(w1.mean()))
+                self.layer_weights["Layer 2"].append(float(w2.mean()))
+                self.layer_weights["Layer 3"].append(float(w3.mean()))
+                
+                self.final_w1 = w1
+                self.final_w2 = w2
+                self.final_w3 = w3
+                
+            self.current_epoch = epoch
+            time.sleep(0.1) # Simulate visible progress pacing for rendering
+            
+        # Save model and output YAML
+        models_dir = Path('./models')
+        models_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Save checkpoint
+        model_path = models_dir / f"model_{timestamp}.pth"
+        payload = {
+            "model_kwargs": model.config(),
+            "state_dict": model.state_dict(),
+        }
+        torch.save(payload, model_path)
+        
+        # Output YAML metadata record
+        yaml_path = models_dir / f"model_{timestamp}.yaml"
+        yaml_data = {
+            "timestamp": timestamp,
+            "train_ratio": self.train_test_split_perc,
+            "train_set_size": len(train_samples),
+            "test_set_size": len(test_samples),
+            "final_train_loss": float(self.train_losses[-1]),
+            "final_test_loss": float(self.test_losses[-1]),
+            "final_train_accuracy": float(self.train_accuracies[-1]),
+            "final_test_accuracy": float(self.test_accuracies[-1]),
+            "train_files": [str(s.path.resolve().relative_to(Path('.').resolve())) for s in train_samples if s.path],
+            "test_files": [str(s.path.resolve().relative_to(Path('.').resolve())) for s in test_samples if s.path],
+        }
+        
+        with open(yaml_path, "w", encoding="utf-8") as f:
+            yaml.safe_dump(yaml_data, f, default_flow_style=False, allow_unicode=True)
+            
+        logging.info(f"Model and YAML metadata saved successfully.")
+        self.is_training = False
+
+    def gui_training_metrics(self):
+        # Progress bar
+        if self.is_training or self.current_epoch > 0:
+            progress = self.current_epoch / self.epochs if self.epochs > 0 else 0.0
+            imgui.text(f"Progress: Epoch {self.current_epoch} / {self.epochs}")
+            imgui.progress_bar(progress, (0.0, 0.0), f"{int(progress * 100)}%")
+            imgui.spacing()
+        else:
+            imgui.text("Click 'Start Training' in Settings to train a model.")
+            return
+
+        if imgui.begin_tab_bar("TrainingTabBar"):
+            selected_metrics, _ = imgui.begin_tab_item("Metrics Plots")
+            if selected_metrics:
+                if len(self.train_losses) > 0:
+                    if implot.begin_plot("Loss Rate"):
+                        epochs_indices = np.array(range(1, len(self.train_losses) + 1), dtype=np.float32)
+                        implot.setup_axes("Epoch", "Loss")
+                        implot.plot_line("Train Loss", epochs_indices, np.array(self.train_losses, dtype=np.float32))
+                        if len(self.test_losses) > 0:
+                            implot.plot_line("Test Loss", epochs_indices, np.array(self.test_losses, dtype=np.float32))
+                        implot.end_plot()
+                        
+                    if implot.begin_plot("Accuracy Rate"):
+                        epochs_indices = np.array(range(1, len(self.train_accuracies) + 1), dtype=np.float32)
+                        implot.setup_axes("Epoch", "Accuracy")
+                        implot.plot_line("Train Acc", epochs_indices, np.array(self.train_accuracies, dtype=np.float32))
+                        if len(self.test_accuracies) > 0:
+                            implot.plot_line("Test Acc", epochs_indices, np.array(self.test_accuracies, dtype=np.float32))
+                        implot.end_plot()
+                else:
+                    imgui.text("Awaiting metrics...")
+                imgui.end_tab_item()
+
+            selected_weights, _ = imgui.begin_tab_item("Layer Weights (Epoch Mean)")
+            if selected_weights:
+                if len(self.layer_weights["Layer 1"]) > 0:
+                    if implot.begin_plot("Layer Parameter Weights"):
+                        epochs_indices = np.array(range(1, len(self.layer_weights["Layer 1"]) + 1), dtype=np.float32)
+                        implot.setup_axes("Epoch", "Mean Parameter Weight")
+                        implot.plot_line("Layer 1 (64->128)", epochs_indices, np.array(self.layer_weights["Layer 1"], dtype=np.float32))
+                        implot.plot_line("Layer 2 (128->64)", epochs_indices, np.array(self.layer_weights["Layer 2"], dtype=np.float32))
+                        implot.plot_line("Layer 3 (64->3)", epochs_indices, np.array(self.layer_weights["Layer 3"], dtype=np.float32))
+                        implot.end_plot()
+                else:
+                    imgui.text("Awaiting weight data...")
+                imgui.end_tab_item()
+
+            selected_matrices, _ = imgui.begin_tab_item("Weight Matrices")
+            if selected_matrices:
+                if self.final_w3 is not None:
+                    imgui.text("Final Dense Layer Weight Matrix (3 Classes x 64 Features)")
+                    if implot.begin_plot("Final Layer Weights Heatmap"):
+                        implot.setup_legend(implot.Location_.east, implot.LegendFlags_.outside)
+                        implot.plot_heatmap(
+                            "Weights",
+                            self.final_w3,
+                            -0.5,
+                            0.5,
+                            bounds_min=(0.0, 0.0),
+                            bounds_max=(1.0, 1.0)
+                        )
+                        implot.end_plot()
+                else:
+                    imgui.text("Weight matrix visualization will load when training finishes.")
+                imgui.end_tab_item()
+
+            imgui.end_tab_bar()
 
     def gui_heatmap(self):
         pass
@@ -86,7 +359,3 @@ class TrainingApp(AppBase):
             )
         except Exception as exc:
             logging.exception(exc)
-        
-        
-
-

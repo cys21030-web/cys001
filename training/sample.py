@@ -23,7 +23,7 @@ class ToFSample:
             )
 
     def to_sensor(self) -> torch.Tensor:
-        tensor = torch.tensor(self.data, dtype = torch.float32)
+        tensor = torch.tensor(self.data.repaired_data, dtype = torch.float32)
         return tensor.clamp(min=ToFData.min_valid, max=ToFData.max_valid) / ToFData.max_valid
 
     @classmethod

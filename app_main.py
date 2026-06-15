@@ -70,6 +70,12 @@ class MainApp:
         if self.current_app:
             self.current_app.gui_3d_plot()
 
+    def gui_training_metrics(self):
+        if self.current_app and hasattr(self.current_app, "gui_training_metrics"):
+            self.current_app.gui_training_metrics()
+        else:
+            imgui.text("Training metrics are only available in Training Mode.")
+
     def config_docking(self):
         docking_params = hello_imgui.DockingParams()
 
@@ -105,10 +111,17 @@ class MainApp:
             gui_function_ = self.gui_settings
         )
 
+        w_training = hello_imgui.DockableWindow(
+            label_ = 'Training Metrics',
+            dock_space_name_ = 'MainDockSpace',
+            gui_function_ = self.gui_training_metrics
+        )
+
         docking_params.dockable_windows = [
             w_heatmap,
             w_3dplot,
-            w_settings
+            w_settings,
+            w_training
         ]
         return docking_params
 
