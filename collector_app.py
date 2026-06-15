@@ -1,22 +1,27 @@
-from imgui_bundle import imgui, hello_imgui, implot, implot3d
+# -*- coding: utf-8 -*-
 import logging
-from ai.ToFDataLabel import ToFDataLabel
-from common.ToFSensor import ToFSensor
+import random
 from datetime import datetime
 from pathlib import Path
-import math
 import numpy as np
+
+from imgui_bundle import imgui, hello_imgui, implot, implot3d
+
+from ai.ToFDataLabel import ToFDataLabel
+from common.ToFSensor import ToFSensor
 from common.WorldCoord import WorldCoord
-import random
 from AppBase import App as AppBase
 
 
 class CollectorApp(AppBase):
     def __init__(self):
         super().__init__()
+        
+        # 初始化 ToF 傳感器驅動與採集狀態
         self.tof_sensor = ToFSensor()
         self.input_label = 0
 
+        # 用於追蹤各類別當前的採集樣本數與目標數量
         self.snapshot_cnt = np.zeros((ToFDataLabel.label_cnts), dtype=np.int32)
         self.snapshot_cnt_target = np.zeros((ToFDataLabel.label_cnts), dtype=np.int32)
         self.snapshot_enabled = False
@@ -29,7 +34,6 @@ class CollectorApp(AppBase):
     def view_angle(self):
         if not self.sensor_ready:
             return 0.0
-        
         return self.tof_sensor.view_angle.view_angle
     
     @view_angle.setter
@@ -71,6 +75,7 @@ class CollectorApp(AppBase):
         self.snapshot()
 
     def update_data(self):
+        # 獲取傳感器最新影格，並套用簡單的卡爾曼濾波 (平滑權重 0.5) 進行數值降噪
         if self.tof_sensor.last_raw_data is None:
             return
 
@@ -78,10 +83,10 @@ class CollectorApp(AppBase):
             return
         
         self.raw_data = self.raw_data * 0.5 + self.tof_sensor.last_raw_data.repaired_data * 0.5
-        # self.raw_data = self.tof_sensor.last_raw_data.repaired_data
         self.cloud_points = WorldCoord(self.raw_data, self.tof_sensor.view_angle)
 
     def gui_settings(self):
+        # 渲染左側傳感器參數調整、硬體狀態與採集按鈕控制
         super().gui_settings_plot_view()
         imgui.separator_text("Sensor")
 
@@ -109,14 +114,17 @@ class CollectorApp(AppBase):
 
         imgui.separator()
 
+        # 顯示當前已收集的各標籤檔案數量
         for idx in range(ToFDataLabel.label_cnts):
             imgui.label_text(ToFDataLabel.labels[idx].name, f'{self.snapshot_cnt[idx]}')
 
     def enable_snapshot(self):
+        # 啟動自動批次採集，每次點擊預設自動採集 100 影格
         self.snapshot_cnt_target[self.input_label] = self.snapshot_cnt[self.input_label] + 100
         self.snapshot_enabled = True
 
     def snapshot(self):
+        # 批次數據自動儲存，限制儲存影格間隔 (加入少量隨機因子防抖)，確保數據多樣性
         if not self.snapshot_enabled:
             return
         
@@ -140,11 +148,11 @@ class CollectorApp(AppBase):
         if not output_dir.exists():
             output_dir.mkdir(parents=True)
 
-        # self.cloud_points.save_as_ply(f'./snapshot/{label_name}/{output_name}.ply')
         self.save_raw_data(output_dir / f'{output_name}.dat')
         self.snapshot_cnt[self.input_label] += 1
 
     def save_raw_data(self, filename: str = 'dat.dat') -> str:
+        # 格式化輸出距離數據，寫入 .dat 檔案
         print(f"{len(self.raw_data)} data saved to {filename}")
         with open(filename, "w") as f:
             for y in range(self.raw_data.shape[0]):

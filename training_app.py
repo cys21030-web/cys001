@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 import os
+
+# 設置環境變量，限制 OpenMP 與 MKL 僅使用單線程，避免多線程庫在樹莓派4B上引起段錯誤
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OMP_WAIT_POLICY"] = "PASSIVE"
@@ -32,7 +35,7 @@ class TrainingApp(AppBase):
 
         self.samples = {}
         
-        # Training state variables
+        # 訓練狀態與指標變量
         self.is_training = False
         self.train_test_split_perc = 50.0
         self.current_epoch = 0
@@ -50,7 +53,7 @@ class TrainingApp(AppBase):
         self.final_w2 = None
         self.final_w3 = None
 
-        # Persistent plotting arrays (keeps C++ pointers alive)
+        # 持久化繪圖陣列（用以在記憶體中保持 C++ 數據指標有效，避免被 Python GC 釋放而引發段錯誤）
         self.plot_epochs_indices = np.array([], dtype=np.float32)
         self.plot_train_losses = np.array([], dtype=np.float32)
         self.plot_test_losses = np.array([], dtype=np.float32)
@@ -60,7 +63,7 @@ class TrainingApp(AppBase):
         self.plot_layer2 = np.array([], dtype=np.float32)
         self.plot_layer3 = np.array([], dtype=np.float32)
 
-        # Scan files in a daemon thread on startup so the app loads instantly
+        # 啟動時在背景守護線程中自動掃描本地已收集數據，防止視窗載入卡頓
         import threading
         threading.Thread(
             target=self.data_pre_scan,
@@ -75,6 +78,7 @@ class TrainingApp(AppBase):
             
         imgui.separator_text('Loaded')
 
+        # 渲染樹狀結構，列出當前本地載入的所有數據文件，點擊可即時預覽 heatmap 與 3D 雲點圖
         if imgui.tree_node_ex("Data Files", imgui.TreeNodeFlags_.default_open | imgui.TreeNodeFlags_.open_on_arrow | imgui.TreeNodeFlags_.open_on_double_click):
             for lbl in ToFDataLabel.labels:
                 lbl_name = lbl.name
@@ -97,7 +101,7 @@ class TrainingApp(AppBase):
                         imgui.tree_pop()
             imgui.tree_pop()
 
-        # Add Training Split Slider and Button
+        # 訓練控制面版（包含 Train Ratio 滑桿、與啟動按鈕）
         imgui.separator_text('Training Control')
         if self.is_training:
             imgui.begin_disabled()
@@ -107,7 +111,7 @@ class TrainingApp(AppBase):
         else:
             changed, self.train_test_split_perc = imgui.slider_float('Train Split (%)', self.train_test_split_perc, 10.0, 90.0, "%.1f")
             
-            # Check if there are any samples loaded
+            # 若當前未載入任何數據，禁用訓練按鈕
             total_samples_loaded = sum(len(deque) for deque in self.samples.values()) if self.samples else 0
             if total_samples_loaded == 0:
                 imgui.begin_disabled()
@@ -118,16 +122,15 @@ class TrainingApp(AppBase):
                     self.is_training = True
                     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                     
-                    # Gather all loaded samples
+                    # 收集所有的採集數據
                     all_samples = []
                     for lbl_name, sample_deque in self.samples.items():
                         all_samples.extend(list(sample_deque))
                         
-                    # Split
+                    # 隨機打亂並依據 split 比例進行 Train/Test 分割
                     samples_by_label = {}
                     for s in all_samples:
-                        samples_by_label.setdefault(s.label, [])
-                        samples_by_label[s.label].append(s)
+                        samples_by_label.setdefault(s.label, []).append(s)
                         
                     train_samples = []
                     test_samples = []
@@ -136,34 +139,28 @@ class TrainingApp(AppBase):
                     for label, samples_list in samples_by_label.items():
                         shuffled = list(samples_list)
                         random.shuffle(shuffled)
-                        split_idx = max(1, int(len(shuffled) * split_perc)) # Ensure at least 1 training sample
+                        split_idx = max(1, int(len(shuffled) * split_perc)) # 確保各類別至少有一個樣本供訓練
                         train_samples.extend(shuffled[:split_idx])
                         test_samples.extend(shuffled[split_idx:])
                         
-                    # Fallback if split is empty
                     if not train_samples and all_samples:
                         train_samples.append(all_samples[0])
                         test_samples = all_samples[1:]
                         
-                    # Run training synchronously in the main thread (simple and solid!)
+                    # 在主線程中執行同步模型訓練（單線程極簡穩定版，防崩潰）
                     self.run_training_loop(train_samples, test_samples, timestamp)
 
     def run_training_loop(self, train_samples, test_samples, timestamp):
-        print(f"[Trace] Starting run_training_loop with {len(train_samples)} train and {len(test_samples)} test samples.")
         from torch import nn
         from torch.utils.data import DataLoader
         from training.dataset import ToFDataset
         from ai.ToFTrainer import ToFClassifierModel
         
         device = "cuda" if torch.cuda.is_available() else "cpu"
-        print(f"[Trace] Selected device: {device}")
-        
-        print("[Trace] Instantiating ToFClassifierModel...")
         model = ToFClassifierModel().to(device)
         criterion = nn.CrossEntropyLoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
         
-        print("[Trace] Loading datasets...")
         train_dataset = ToFDataset(train_samples)
         test_dataset = ToFDataset(test_samples)
         
@@ -182,14 +179,13 @@ class TrainingApp(AppBase):
         
         self.current_epoch = 0
         
-        print(f"[Trace] Commencing {self.epochs} training epochs...")
         for epoch in range(1, self.epochs + 1):
             model.train()
             epoch_loss = 0.0
             correct = 0
             
             for features, labels in train_loader:
-                # Flat 2D input (8x8) to 1D (64)
+                # 將 2D [8, 8] 輸入展平成 1D [64] 傳入分類模型
                 features = features.to(device).view(features.size(0), -1)
                 labels = labels.to(device)
                 
@@ -206,7 +202,7 @@ class TrainingApp(AppBase):
             train_loss = epoch_loss / len(train_dataset) if len(train_dataset) > 0 else 0.0
             train_acc = correct / len(train_dataset) if len(train_dataset) > 0 else 0.0
             
-            # Evaluate on test set
+            # 在測試集上計算交叉熵與分類準確率
             model.eval()
             test_loss = 0.0
             test_correct = 0
@@ -229,7 +225,7 @@ class TrainingApp(AppBase):
             self.train_accuracies.append(train_acc)
             self.test_accuracies.append(val_acc)
             
-            # Extract weight statistics
+            # 提取並追蹤神經網路各層參數權重的平均值變化
             with torch.no_grad():
                 w1 = model.network[0].weight.cpu().numpy()
                 w2 = model.network[3].weight.cpu().numpy()
@@ -244,9 +240,8 @@ class TrainingApp(AppBase):
                 self.final_w3 = w3
                 
             self.current_epoch = epoch
-            print(f"[Trace] Epoch {epoch} completed: loss={train_loss:.4f}, val_loss={val_loss:.4f}, acc={train_acc:.4f}, val_acc={val_acc:.4f}")
             
-        print("[Trace] Storing persistent arrays for ImPlot rendering...")
+        # 轉換指標數值為持久化 NumPy 浮點陣列，鎖定 C++ 指標記憶體，完美杜絕記憶體 GC 導致的段錯誤
         self.plot_epochs_indices = np.array(range(1, len(self.train_losses) + 1), dtype=np.float32)
         self.plot_train_losses = np.array(self.train_losses, dtype=np.float32)
         self.plot_test_losses = np.array(self.test_losses, dtype=np.float32)
@@ -256,24 +251,20 @@ class TrainingApp(AppBase):
         self.plot_layer1 = np.array(self.layer_weights["Layer 1"], dtype=np.float32)
         self.plot_layer2 = np.array(self.layer_weights["Layer 2"], dtype=np.float32)
         self.plot_layer3 = np.array(self.layer_weights["Layer 3"], dtype=np.float32)
-        print("[Trace] Persistent plotting arrays created successfully.")
 
-        # Save model and output YAML
-        print("[Trace] Saving PyTorch checkpoint (.pth)...")
+        # 儲存 PyTorch 權重檔案與 YAML 分割數據歷史紀錄
         models_dir = Path('./models')
         models_dir.mkdir(parents=True, exist_ok=True)
         
-        # Save checkpoint
+        # 儲存 .pth 權重結構
         model_path = models_dir / f"model_{timestamp}.pth"
         payload = {
             "model_kwargs": model.config(),
             "state_dict": model.state_dict(),
         }
         torch.save(payload, model_path)
-        print(f"[Trace] Checkpoint saved to: {model_path}")
         
-        # Output YAML metadata record
-        print("[Trace] Saving YAML metadata (.yaml)...")
+        # 儲存 YAML 分割元數據與檔案紀錄，用以事後追溯
         yaml_path = models_dir / f"model_{timestamp}.yaml"
         yaml_data = {
             "timestamp": timestamp,
@@ -290,19 +281,13 @@ class TrainingApp(AppBase):
         
         with open(yaml_path, "w", encoding="utf-8") as f:
             yaml.safe_dump(yaml_data, f, default_flow_style=False, allow_unicode=True)
-        print(f"[Trace] YAML metadata saved to: {yaml_path}")
             
         logging.info(f"Model and YAML metadata saved successfully.")
         self.is_training = False
-        print("[Trace] run_training_loop successfully exited!")
 
     def gui_training_metrics(self):
-        # Throttle tracing output to only print when self.current_epoch changes
+        # 繪製訓練進度條與狀態
         if self.current_epoch > 0:
-            if not hasattr(self, '_last_gui_trace_epoch') or self._last_gui_trace_epoch != self.current_epoch:
-                self._last_gui_trace_epoch = self.current_epoch
-                print(f"[Trace GUI] Rendering training metrics panel for epoch {self.current_epoch}")
-                
             progress = self.current_epoch / self.epochs if self.epochs > 0 else 0.0
             imgui.text(f"Status: Training Complete (30 / 30 Epochs)")
             imgui.progress_bar(progress, (0.0, 0.0), f"{int(progress * 100)}%")
@@ -311,12 +296,11 @@ class TrainingApp(AppBase):
             imgui.text("Click 'Start Training' in Settings to train a model.")
             return
 
+        # 切換分頁，繪製損失函數曲線、分類準確率、各層權重變化與混淆權重矩陣
         if imgui.begin_tab_bar("TrainingTabBar"):
             selected_metrics, _ = imgui.begin_tab_item("Metrics Plots")
             if selected_metrics:
                 if len(self.plot_train_losses) > 0:
-                    if not hasattr(self, '_last_plot_trace_epoch') or self._last_plot_trace_epoch != self.current_epoch:
-                        print(f"[Trace GUI] Drawing Metrics Plots: self.plot_train_losses.shape = {self.plot_train_losses.shape}")
                     if implot.begin_plot("Loss Rate"):
                         implot.setup_axes("Epoch", "Loss")
                         implot.plot_line("Train Loss", self.plot_epochs_indices, self.plot_train_losses)
@@ -337,8 +321,6 @@ class TrainingApp(AppBase):
             selected_weights, _ = imgui.begin_tab_item("Layer Weights (Epoch Mean)")
             if selected_weights:
                 if len(self.plot_layer1) > 0:
-                    if not hasattr(self, '_last_weight_trace_epoch') or self._last_weight_trace_epoch != self.current_epoch:
-                        print(f"[Trace GUI] Drawing Layer Weight curves: self.plot_layer1.shape = {self.plot_layer1.shape}")
                     if implot.begin_plot("Layer Parameter Weights"):
                         implot.setup_axes("Epoch", "Mean Parameter Weight")
                         implot.plot_line("Layer 1 (64->128)", self.plot_epochs_indices, self.plot_layer1)
@@ -352,8 +334,6 @@ class TrainingApp(AppBase):
             selected_matrices, _ = imgui.begin_tab_item("Weight Matrices")
             if selected_matrices:
                 if self.final_w3 is not None:
-                    if not hasattr(self, '_last_matrix_trace_epoch') or self._last_matrix_trace_epoch != self.current_epoch:
-                        print(f"[Trace GUI] Drawing Weight Heatmap: self.final_w3.shape = {self.final_w3.shape}")
                     imgui.text("Final Dense Layer Weight Matrix (3 Classes x 64 Features)")
                     if implot.begin_plot("Final Layer Weights Heatmap"):
                         implot.setup_legend(implot.Location_.east, implot.LegendFlags_.outside)
@@ -370,18 +350,13 @@ class TrainingApp(AppBase):
                     imgui.text("Weight matrix visualization will load when training finishes.")
                 imgui.end_tab_item()
 
-            # Update tracers inside tab bar once per epoch
-            if not hasattr(self, '_last_plot_trace_epoch') or self._last_plot_trace_epoch != self.current_epoch:
-                self._last_plot_trace_epoch = self.current_epoch
-                self._last_weight_trace_epoch = self.current_epoch
-                self._last_matrix_trace_epoch = self.current_epoch
-
             imgui.end_tab_bar()
 
     def gui_heatmap(self):
         pass
 
     def data_pre_scan(self):
+        # 自動掃描本地已採集的歷史數據包 (.dat) 並載入佇列中
         for lbl in ToFDataLabel.labels:
             dir = self.snapshot_dir / lbl.name
             if not dir.exists():

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 import os
 import sys
 import time
@@ -20,7 +21,7 @@ from training.sample import ToFSample
 from training.dataset import ToFDataset
 from ai.ToFTrainer import ToFClassifierModel
 
-# Setup basic logging
+# 設定日誌
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 def clear_terminal():
@@ -32,7 +33,8 @@ def draw_header():
     print("=" * 70)
 
 def scan_datasets(snapshot_dir: Path):
-    print("[*] Scanning snapshot directories...")
+    # 掃描本地 snapshot/ 資料夾下的所有影格樣本
+    print("[*] 正在掃描本地影格數據...")
     samples = {}
     total_count = 0
     
@@ -51,52 +53,52 @@ def scan_datasets(snapshot_dir: Path):
             except Exception as e:
                 pass
                 
-        print(f"  - Label {lbl.name:<10} [Index {lbl.index}]: Loaded {len(samples[lbl.name]):>3} files")
+        print(f"  - 標籤 {lbl.name:<10} [索引 {lbl.index}]: 成功載入 {len(samples[lbl.name]):>3} 份文件")
         
-    print(f"[*] Total dataset size loaded: {total_count} samples.")
+    print(f"[*] 數據集載入完成，共計 {total_count} 份樣本。")
     return samples, total_count
 
 def main():
     clear_terminal()
     draw_header()
     
-    # Identify snapshot directory
+    # 確認 snapshot 資料夾存在
     snapshot_dir = Path('./snapshot')
     if not snapshot_dir.exists():
-        print(f"[Error] Snapshot directory '{snapshot_dir.resolve()}' not found.")
+        print(f"[Error] 未找到 snapshot 資料夾: '{snapshot_dir.resolve()}'")
         sys.exit(1)
         
-    # Scan datasets
+    # 執行數據掃描
     samples, total_count = scan_datasets(snapshot_dir)
     if total_count == 0:
-        print("[Error] No .dat samples found inside the snapshot folders. Please collect data first.")
+        print("[Error] snapshot 資料夾內沒有找到任何 .dat 數據。請先採集數據。")
         sys.exit(1)
         
     print("-" * 70)
     
-    # 1. Slider/Prompt to set split percentage (Default 50%)
+    # 1. 設置訓練集/測試集分割比例（預設 50%）
     try:
-        split_input = input("Enter training split ratio % (10 to 90, default 50): ").strip()
+        split_input = input("請輸入訓練集分割比例 % (10 到 90, 預設為 50): ").strip()
         if split_input == "":
             split_perc = 50.0
         else:
             split_perc = float(split_input)
             if split_perc < 10 or split_perc > 90:
-                print("[!] Out of bounds, using default 50.0%")
+                print("[!] 輸入超出範圍，套用預設值 50.0%")
                 split_perc = 50.0
     except ValueError:
-        print("[!] Invalid input, using default 50.0%")
+        print("[!] 無效輸入，套用預設值 50.0%")
         split_perc = 50.0
         
-    print(f"[*] Configured Train/Test ratio: {split_perc}% / {100.0 - split_perc}%")
+    print(f"[*] 訓練集比例: {split_perc}% | 測試集比例: {100.0 - split_perc}%")
     print("-" * 70)
     
-    input("Press ENTER to start the PyTorch training pipeline...")
+    input("按 ENTER 鍵開始訓練 PyTorch 分類模型...")
     
-    print("\n[*] Initializing split...")
+    print("\n[*] 正在執行數據集隨機分割...")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Gather and split
+    # 整合與隨機分流
     all_samples = []
     for s_list in samples.values():
         all_samples.extend(s_list)
@@ -120,12 +122,12 @@ def main():
         train_samples.append(all_samples[0])
         test_samples = all_samples[1:]
         
-    print(f"[*] Split completed: Train subset = {len(train_samples)}, Test subset = {len(test_samples)}")
+    print(f"[*] 分割完成: 訓練集樣本數 = {len(train_samples)}, 測試集樣本數 = {len(test_samples)}")
     print("-" * 70)
     
-    # Setup PyTorch components natively
+    # 準備 PyTorch 分類網路
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    print(f"[*] Target Compute Device: {device.upper()}")
+    print(f"[*] 計算執行裝置: {device.upper()}")
     
     model = ToFClassifierModel().to(device)
     criterion = nn.CrossEntropyLoss()
@@ -149,16 +151,17 @@ def main():
     }
     
     epochs = 30
-    print(f"[*] Commencing {epochs} training epochs...")
+    print(f"[*] 開始執行 {epochs} 個 Epoch 訓練...")
     print("=" * 70)
     
+    # 執行 PyTorch 訓練迴圈
     for epoch in range(1, epochs + 1):
         model.train()
         epoch_loss = 0.0
         correct = 0
         
         for features, labels in train_loader:
-            # Flatten 2D (8, 8) input to 1D (64)
+            # 將 2D [8, 8] 輸入展平成 1D [64]
             features = features.to(device).view(features.size(0), -1)
             labels = labels.to(device)
             
@@ -175,7 +178,7 @@ def main():
         train_loss = epoch_loss / len(train_dataset) if len(train_dataset) > 0 else 0.0
         train_acc = correct / len(train_dataset) if len(train_dataset) > 0 else 0.0
         
-        # Evaluate
+        # 測試集評估
         model.eval()
         test_loss = 0.0
         test_correct = 0
@@ -198,7 +201,7 @@ def main():
         train_accuracies.append(train_acc)
         test_accuracies.append(val_acc)
         
-        # Track Layer Weights Mean
+        # 追蹤網路參數變化
         with torch.no_grad():
             w1 = model.network[0].weight.cpu().numpy()
             w2 = model.network[3].weight.cpu().numpy()
@@ -208,7 +211,7 @@ def main():
             layer_weights["Layer 2"].append(float(w2.mean()))
             layer_weights["Layer 3"].append(float(w3.mean()))
             
-        # Draw dynamic ASCII progress bar
+        # 繪製終端機動態 ASCII 進度條
         bar_length = 20
         progress_ratio = epoch / epochs
         filled_length = int(bar_length * progress_ratio)
@@ -218,17 +221,17 @@ def main():
               f"Train Loss: {train_loss:.4f} | Acc: {train_acc*100:.1f}% | "
               f"Test Loss: {val_loss:.4f} | Test Acc: {val_acc*100:.1f}%")
         
-        # Track weight variations for Layer 3 (Final Classifier weights) in the trace
         if epoch % 10 == 0 or epoch == epochs:
-            print(f"  -> Weight Mean Stats: Layer 1: {w1.mean():.4f} | Layer 2: {w2.mean():.4f} | Layer 3: {w3.mean():.4f}")
+            print(f"  -> 層參數平均值: Layer 1: {w1.mean():.4f} | Layer 2: {w2.mean():.4f} | Layer 3: {w3.mean():.4f}")
             
     print("=" * 70)
-    print("[*] Training pipeline completed!")
+    print("[*] 模型神經網路訓練成功完成！")
     
-    # Save model and Output YAML record
+    # 儲存神經網路與元數據 YAML 記錄
     models_dir = Path('./models')
     models_dir.mkdir(parents=True, exist_ok=True)
     
+    # 儲存權重檔
     model_path = models_dir / f"model_{timestamp}.pth"
     payload = {
         "model_kwargs": model.config(),
@@ -236,6 +239,7 @@ def main():
     }
     torch.save(payload, model_path)
     
+    # 儲存元數據 YAML 歷史對照檔案，供即時推論前追溯分割來源
     yaml_path = models_dir / f"model_{timestamp}.yaml"
     yaml_data = {
         "timestamp": timestamp,
@@ -254,14 +258,14 @@ def main():
         yaml.safe_dump(yaml_data, f, default_flow_style=False, allow_unicode=True)
         
     print("\n" + "=" * 70)
-    print("      TRAINING METADATA & ARTIFACT RECORD")
+    print("      TRAINING METADATA & ARTIFACT RECORD (訓練元數據報告)")
     print("=" * 70)
-    print(f"  Model Saved to:  {model_path.resolve()}")
-    print(f"  YAML Log Saved:  {yaml_path.resolve()}")
-    print(f"  Train Acc:       {train_accuracies[-1]*100:.2f}%  (Loss: {train_losses[-1]:.4f})")
-    print(f"  Test Acc:        {test_accuracies[-1]*100:.2f}%  (Loss: {test_losses[-1]:.4f})")
+    print(f"  模型存檔路徑:   {model_path.resolve()}")
+    print(f"  YAML 歷史日誌:  {yaml_path.resolve()}")
+    print(f"  訓練集準確率:   {train_accuracies[-1]*100:.2f}%  (損失率: {train_losses[-1]:.4f})")
+    print(f"  測試集準確率:   {test_accuracies[-1]*100:.2f}%  (損失率: {test_loss:.4f})")
     print("=" * 70)
-    print("[*] TUI pipeline session finished. Ready to load into Inference mode!\n")
+    print("[*] 終端機訓練流程正常退出。已就緒，可立即在 GUI 推論模式中載入此模型進行實時預測！\n")
 
 if __name__ == "__main__":
     main()
