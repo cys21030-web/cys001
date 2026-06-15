@@ -8,10 +8,12 @@ import logging
 from imgui_bundle import imgui, hello_imgui, implot, implot3d
 from collector_app import CollectorApp
 from training_app import TrainingApp
+from inference_app import InferenceApp
 
 class AppMode(enum.Enum):
     COLLECTOR = "Collector"
     TRAINING = "Training"
+    INFERENCE = "Inference"
 
 class MainApp:
     def __init__(self):
@@ -59,6 +61,14 @@ class MainApp:
                     if self.app_mode != AppMode.TRAINING:
                         self.app_mode = AppMode.TRAINING
                         self.current_app = TrainingApp()
+
+                clicked_inference, _ = imgui.menu_item(
+                    AppMode.INFERENCE.value, "", self.app_mode == AppMode.INFERENCE
+                )
+                if clicked_inference:
+                    if self.app_mode != AppMode.INFERENCE:
+                        self.app_mode = AppMode.INFERENCE
+                        self.current_app = InferenceApp()
                 
                 imgui.end_menu()
             imgui.end_main_menu_bar()
