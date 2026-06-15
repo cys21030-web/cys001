@@ -176,8 +176,9 @@ class InferenceApp(AppBase):
             # Sort in descending order of confidence score
             labeled_probs.sort(key=lambda x: x[1], reverse=True)
             
-            # Determine if there is an obvious/certain result (threshold set to 70%)
-            threshold = 0.70
+            # Determine if there is an obvious/certain result (margin set dynamically to 1.5 * (1 / N))
+            num_classes = len(ToFDataLabel.labels)
+            threshold = 1.5 * (1.0 / num_classes) if num_classes > 0 else 0.50
             highest_prob = labeled_probs[0][1]
             has_obvious_result = highest_prob >= threshold
             
