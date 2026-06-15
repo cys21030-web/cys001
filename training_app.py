@@ -30,6 +30,7 @@ class TrainingApp(AppBase):
         self.samples = {}
         
         # New training state variables
+        self.metrics_lock = threading.Lock()
         self.is_training = False
         self.train_test_split_perc = 50.0
         self.current_epoch = 0
@@ -208,27 +209,29 @@ class TrainingApp(AppBase):
             val_loss = test_loss / len(test_dataset) if len(test_dataset) > 0 else 0.0
             val_acc = test_correct / len(test_dataset) if len(test_dataset) > 0 else 0.0
             
-            # Record metrics
-            self.train_losses.append(train_loss)
-            self.test_losses.append(val_loss)
-            self.train_accuracies.append(train_acc)
-            self.test_accuracies.append(val_acc)
-            
-            # Extract weight statistics
-            with torch.no_grad():
-                w1 = model.network[0].weight.cpu().numpy()
-                w2 = model.network[3].weight.cpu().numpy()
-                w3 = model.network[6].weight.cpu().numpy()
+            # Record metrics under thread safety lock
+            with self.metrics_lock:
+                self.train_losses.append(train_loss)
+                self.test_losses.append(val_loss)
+                self.train_accuracies.append(train_acc)
+                self.test_accuracies.append(val_acc)
                 
-                self.layer_weights["Layer 1"].append(float(w1.mean()))
-                self.layer_weights["Layer 2"].append(float(w2.mean()))
-                self.layer_weights["Layer 3"].append(float(w3.mean()))
+                # Extract weight statistics
+                with torch.no_grad():
+                    w1 = model.network[0].weight.cpu().numpy()
+                    w2 = model.network[3].weight.cpu().numpy()
+                    w3 = model.network[6].weight.cpu().numpy()
+                    
+                    self.layer_weights["Layer 1"].append(float(w1.mean()))
+                    self.layer_weights["Layer 2"].append(float(w2.mean()))
+                    self.layer_weights["Layer 3"].append(float(w3.mean()))
+                    
+                    self.final_w1 = w1
+                    self.final_w2 = w2
+                    self.final_w3 = w3
+                    
+                self.current_epoch = epoch
                 
-                self.final_w1 = w1
-                self.final_w2 = w2
-                self.final_w3 = w3
-                
-            self.current_epoch = epoch
             time.sleep(0.1) # Simulate visible progress pacing for rendering
             
         # Save model and output YAML
@@ -266,33 +269,51 @@ class TrainingApp(AppBase):
 
     def gui_training_metrics(self):
         # Progress bar
-        if self.is_training or self.current_epoch > 0:
-            progress = self.current_epoch / self.epochs if self.epochs > 0 else 0.0
-            imgui.text(f"Progress: Epoch {self.current_epoch} / {self.epochs}")
+        with self.metrics_lock:
+            is_training_val = self.is_training
+            current_epoch_val = self.current_epoch
+            epochs_val = self.epochs
+
+        if is_training_val or current_epoch_val > 0:
+            progress = current_epoch_val / epochs_val if epochs_val > 0 else 0.0
+            imgui.text(f"Progress: Epoch {current_epoch_val} / {epochs_val}")
             imgui.progress_bar(progress, (0.0, 0.0), f"{int(progress * 100)}%")
             imgui.spacing()
         else:
             imgui.text("Click 'Start Training' in Settings to train a model.")
             return
 
+        # Snapshot lists under lock to prevent concurrent modification segfaults
+        with self.metrics_lock:
+            train_losses_copy = np.array(self.train_losses, dtype=np.float32)
+            test_losses_copy = np.array(self.test_losses, dtype=np.float32)
+            train_accuracies_copy = np.array(self.train_accuracies, dtype=np.float32)
+            test_accuracies_copy = np.array(self.test_accuracies, dtype=np.float32)
+            
+            layer1_copy = np.array(self.layer_weights["Layer 1"], dtype=np.float32)
+            layer2_copy = np.array(self.layer_weights["Layer 2"], dtype=np.float32)
+            layer3_copy = np.array(self.layer_weights["Layer 3"], dtype=np.float32)
+            
+            final_w3_copy = np.array(self.final_w3, dtype=np.float32) if self.final_w3 is not None else None
+
         if imgui.begin_tab_bar("TrainingTabBar"):
             selected_metrics, _ = imgui.begin_tab_item("Metrics Plots")
             if selected_metrics:
-                if len(self.train_losses) > 0:
+                if len(train_losses_copy) > 0:
                     if implot.begin_plot("Loss Rate"):
-                        epochs_indices = np.array(range(1, len(self.train_losses) + 1), dtype=np.float32)
+                        epochs_indices = np.array(range(1, len(train_losses_copy) + 1), dtype=np.float32)
                         implot.setup_axes("Epoch", "Loss")
-                        implot.plot_line("Train Loss", epochs_indices, np.array(self.train_losses, dtype=np.float32))
-                        if len(self.test_losses) > 0:
-                            implot.plot_line("Test Loss", epochs_indices, np.array(self.test_losses, dtype=np.float32))
+                        implot.plot_line("Train Loss", epochs_indices, train_losses_copy)
+                        if len(test_losses_copy) > 0:
+                            implot.plot_line("Test Loss", epochs_indices, test_losses_copy)
                         implot.end_plot()
                         
                     if implot.begin_plot("Accuracy Rate"):
-                        epochs_indices = np.array(range(1, len(self.train_accuracies) + 1), dtype=np.float32)
+                        epochs_indices = np.array(range(1, len(train_accuracies_copy) + 1), dtype=np.float32)
                         implot.setup_axes("Epoch", "Accuracy")
-                        implot.plot_line("Train Acc", epochs_indices, np.array(self.train_accuracies, dtype=np.float32))
-                        if len(self.test_accuracies) > 0:
-                            implot.plot_line("Test Acc", epochs_indices, np.array(self.test_accuracies, dtype=np.float32))
+                        implot.plot_line("Train Acc", epochs_indices, train_accuracies_copy)
+                        if len(test_accuracies_copy) > 0:
+                            implot.plot_line("Test Acc", epochs_indices, test_accuracies_copy)
                         implot.end_plot()
                 else:
                     imgui.text("Awaiting metrics...")
@@ -300,13 +321,13 @@ class TrainingApp(AppBase):
 
             selected_weights, _ = imgui.begin_tab_item("Layer Weights (Epoch Mean)")
             if selected_weights:
-                if len(self.layer_weights["Layer 1"]) > 0:
+                if len(layer1_copy) > 0:
                     if implot.begin_plot("Layer Parameter Weights"):
-                        epochs_indices = np.array(range(1, len(self.layer_weights["Layer 1"]) + 1), dtype=np.float32)
+                        epochs_indices = np.array(range(1, len(layer1_copy) + 1), dtype=np.float32)
                         implot.setup_axes("Epoch", "Mean Parameter Weight")
-                        implot.plot_line("Layer 1 (64->128)", epochs_indices, np.array(self.layer_weights["Layer 1"], dtype=np.float32))
-                        implot.plot_line("Layer 2 (128->64)", epochs_indices, np.array(self.layer_weights["Layer 2"], dtype=np.float32))
-                        implot.plot_line("Layer 3 (64->3)", epochs_indices, np.array(self.layer_weights["Layer 3"], dtype=np.float32))
+                        implot.plot_line("Layer 1 (64->128)", epochs_indices, layer1_copy)
+                        implot.plot_line("Layer 2 (128->64)", epochs_indices, layer2_copy)
+                        implot.plot_line("Layer 3 (64->3)", epochs_indices, layer3_copy)
                         implot.end_plot()
                 else:
                     imgui.text("Awaiting weight data...")
@@ -314,13 +335,13 @@ class TrainingApp(AppBase):
 
             selected_matrices, _ = imgui.begin_tab_item("Weight Matrices")
             if selected_matrices:
-                if self.final_w3 is not None:
+                if final_w3_copy is not None:
                     imgui.text("Final Dense Layer Weight Matrix (3 Classes x 64 Features)")
                     if implot.begin_plot("Final Layer Weights Heatmap"):
                         implot.setup_legend(implot.Location_.east, implot.LegendFlags_.outside)
                         implot.plot_heatmap(
                             "Weights",
-                            self.final_w3,
+                            final_w3_copy,
                             -0.5,
                             0.5,
                             bounds_min=(0.0, 0.0),
