@@ -45,6 +45,16 @@ class TrainingApp(AppBase):
         self.final_w2 = None
         self.final_w3 = None
 
+        # Persistent plotting arrays (keeps C++ pointers alive)
+        self.plot_epochs_indices = np.array([], dtype=np.float32)
+        self.plot_train_losses = np.array([], dtype=np.float32)
+        self.plot_test_losses = np.array([], dtype=np.float32)
+        self.plot_train_accuracies = np.array([], dtype=np.float32)
+        self.plot_test_accuracies = np.array([], dtype=np.float32)
+        self.plot_layer1 = np.array([], dtype=np.float32)
+        self.plot_layer2 = np.array([], dtype=np.float32)
+        self.plot_layer3 = np.array([], dtype=np.float32)
+
         # Scan files in a daemon thread on startup so the app loads instantly
         import threading
         threading.Thread(
@@ -224,6 +234,17 @@ class TrainingApp(AppBase):
                 
             self.current_epoch = epoch
             
+        # Store these as persistent numpy arrays so their memory is alive and never deallocated during rendering!
+        self.plot_epochs_indices = np.array(range(1, len(self.train_losses) + 1), dtype=np.float32)
+        self.plot_train_losses = np.array(self.train_losses, dtype=np.float32)
+        self.plot_test_losses = np.array(self.test_losses, dtype=np.float32)
+        self.plot_train_accuracies = np.array(self.train_accuracies, dtype=np.float32)
+        self.plot_test_accuracies = np.array(self.test_accuracies, dtype=np.float32)
+        
+        self.plot_layer1 = np.array(self.layer_weights["Layer 1"], dtype=np.float32)
+        self.plot_layer2 = np.array(self.layer_weights["Layer 2"], dtype=np.float32)
+        self.plot_layer3 = np.array(self.layer_weights["Layer 3"], dtype=np.float32)
+
         # Save model and output YAML
         models_dir = Path('./models')
         models_dir.mkdir(parents=True, exist_ok=True)
@@ -270,21 +291,19 @@ class TrainingApp(AppBase):
         if imgui.begin_tab_bar("TrainingTabBar"):
             selected_metrics, _ = imgui.begin_tab_item("Metrics Plots")
             if selected_metrics:
-                if len(self.train_losses) > 0:
+                if len(self.plot_train_losses) > 0:
                     if implot.begin_plot("Loss Rate"):
-                        epochs_indices = np.array(range(1, len(self.train_losses) + 1), dtype=np.float32)
                         implot.setup_axes("Epoch", "Loss")
-                        implot.plot_line("Train Loss", epochs_indices, np.array(self.train_losses, dtype=np.float32))
-                        if len(self.test_losses) > 0:
-                            implot.plot_line("Test Loss", epochs_indices, np.array(self.test_losses, dtype=np.float32))
+                        implot.plot_line("Train Loss", self.plot_epochs_indices, self.plot_train_losses)
+                        if len(self.plot_test_losses) > 0:
+                            implot.plot_line("Test Loss", self.plot_epochs_indices, self.plot_test_losses)
                         implot.end_plot()
                         
                     if implot.begin_plot("Accuracy Rate"):
-                        epochs_indices = np.array(range(1, len(self.train_accuracies) + 1), dtype=np.float32)
                         implot.setup_axes("Epoch", "Accuracy")
-                        implot.plot_line("Train Acc", epochs_indices, np.array(self.train_accuracies, dtype=np.float32))
-                        if len(self.test_accuracies) > 0:
-                            implot.plot_line("Test Acc", epochs_indices, np.array(self.test_accuracies, dtype=np.float32))
+                        implot.plot_line("Train Acc", self.plot_epochs_indices, self.plot_train_accuracies)
+                        if len(self.plot_test_accuracies) > 0:
+                            implot.plot_line("Test Acc", self.plot_epochs_indices, self.plot_test_accuracies)
                         implot.end_plot()
                 else:
                     imgui.text("Awaiting metrics...")
@@ -292,13 +311,12 @@ class TrainingApp(AppBase):
 
             selected_weights, _ = imgui.begin_tab_item("Layer Weights (Epoch Mean)")
             if selected_weights:
-                if len(self.layer_weights["Layer 1"]) > 0:
+                if len(self.plot_layer1) > 0:
                     if implot.begin_plot("Layer Parameter Weights"):
-                        epochs_indices = np.array(range(1, len(self.layer_weights["Layer 1"]) + 1), dtype=np.float32)
                         implot.setup_axes("Epoch", "Mean Parameter Weight")
-                        implot.plot_line("Layer 1 (64->128)", epochs_indices, np.array(self.layer_weights["Layer 1"], dtype=np.float32))
-                        implot.plot_line("Layer 2 (128->64)", epochs_indices, np.array(self.layer_weights["Layer 2"], dtype=np.float32))
-                        implot.plot_line("Layer 3 (64->3)", epochs_indices, np.array(self.layer_weights["Layer 3"], dtype=np.float32))
+                        implot.plot_line("Layer 1 (64->128)", self.plot_epochs_indices, self.plot_layer1)
+                        implot.plot_line("Layer 2 (128->64)", self.plot_epochs_indices, self.plot_layer2)
+                        implot.plot_line("Layer 3 (64->3)", self.plot_epochs_indices, self.plot_layer3)
                         implot.end_plot()
                 else:
                     imgui.text("Awaiting weight data...")
