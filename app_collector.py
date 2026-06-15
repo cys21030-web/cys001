@@ -1,0 +1,161 @@
+from imgui_bundle import imgui, hello_imgui, implot, implot3d
+import logging
+from ai.ToFDataLabel import ToFDataLabel
+from common.ToFSensor import ToFSensor
+from datetime import datetime
+from pathlib import Path
+import math
+import numpy as np
+from common.WorldCoord import WorldCoord
+import random
+from AppBase import App as AppBase
+
+
+class App(AppBase):
+    def __init__(self):
+        super().__init__()
+        self.tof_sensor = ToFSensor()
+        self.input_label = 0
+
+        self.snapshot_cnt = np.zeros((ToFDataLabel.label_cnts), dtype=np.int32)
+        self.snapshot_cnt_target = np.zeros((ToFDataLabel.label_cnts), dtype=np.int32)
+        self.snapshot_enabled = False
+        self.last_snapshot_frame = 0
+        self.last_disp_frame = 0
+
+        self.__win_title = "電梯平水監察儀"
+
+    @property
+    def view_angle(self):
+        if not self.sensor_ready:
+            return 0.0
+        
+        return self.tof_sensor.view_angle.view_angle
+    
+    @view_angle.setter
+    def view_angle(self, value):
+        if not self.sensor_ready:
+            return
+        self.tof_sensor.view_angle.view_angle = value
+
+    @property
+    def sensor_pitch(self):
+        if not self.sensor_ready:
+            return 0.0
+        return self.tof_sensor.view_angle.sensor_pitch
+    
+    @sensor_pitch.setter
+    def sensor_pitch(self, value):
+        if not self.sensor_ready:
+            return
+        self.tof_sensor.view_angle.sensor_pitch = value
+
+    @property
+    def sensor_ready(self):
+        return self.tof_sensor.ready
+    
+    @property
+    def sensor_frame_cnt_total(self) -> int:
+        if not self.sensor_ready:
+            return 1
+        return self.tof_sensor.frame_cnt_total
+    
+    @property
+    def sensor_frame_cnt_valid(self) -> int:
+        if not self.sensor_ready:
+            return 0
+        return self.tof_sensor.frame_cnt_valid
+
+    def gui(self):
+        self.update_data()
+        self.snapshot()
+
+    def update_data(self):
+        if self.tof_sensor.last_raw_data is None:
+            return
+
+        if self.last_disp_frame >= self.sensor_frame_cnt_total:
+            return
+        
+        self.raw_data = self.raw_data * 0.5 + self.tof_sensor.last_raw_data.repaired_data * 0.5
+        # self.raw_data = self.tof_sensor.last_raw_data.repaired_data
+        self.cloud_points = WorldCoord(self.raw_data, self.tof_sensor.view_angle)
+
+    def gui_settings(self):
+        super().gui_settings_plot_view()
+        imgui.separator_text("Sensor")
+
+        if not self.sensor_ready:
+            imgui.text("ToF Sensor is not ready yet.")
+            return
+        imgui.label_text('Status', self.tof_sensor.status)
+        imgui.label_text('Frames', f'{self.sensor_frame_cnt_valid:04d} / {self.sensor_frame_cnt_total:04d}')
+
+        imgui.separator_text("Data collection")
+        changed, tmp_input_label = imgui.combo(
+            '標籤',
+            self.input_label,
+            ToFDataLabel.combo_labels
+        )
+        if changed and not self.snapshot_enabled:
+            self.input_label = tmp_input_label
+
+        if self.snapshot_enabled:
+            if imgui.button('stop snapshot'):
+                self.snapshot_enabled = False
+        else:
+            if imgui.button('snapshot'):
+                self.enable_snapshot()
+
+        imgui.separator()
+
+        for idx in range(ToFDataLabel.label_cnts):
+            imgui.label_text(ToFDataLabel.labels[idx].name, f'{self.snapshot_cnt[idx]}')
+
+    def enable_snapshot(self):
+        self.snapshot_cnt_target[self.input_label] = self.snapshot_cnt[self.input_label] + 100
+        self.snapshot_enabled = True
+
+    def snapshot(self):
+        if not self.snapshot_enabled:
+            return
+        
+        if self.snapshot_cnt[self.input_label] >= self.snapshot_cnt_target[self.input_label]:
+            self.snapshot_enabled = False
+            return
+        
+        if self.raw_data is None or self.cloud_points is None:
+            return
+        
+        if self.sensor_frame_cnt_valid <= self.last_snapshot_frame + random.randint(0, 3) * 5:
+            return
+        self.last_snapshot_frame = self.sensor_frame_cnt_valid
+
+        now = datetime.now()
+        now_str = now.strftime("%Y-%m-%d-%H-%M-%S.%f")[:-3]
+        label_name = ToFDataLabel.labels[self.input_label].name
+        output_name = f'{label_name}-{now_str}'
+        output_dir = self.__snapshot_dir / f'{label_name}'
+
+        if not output_dir.exists():
+            output_dir.mkdir(parents=True)
+
+        # self.cloud_points.save_as_ply(f'./snapshot/{label_name}/{output_name}.ply')
+        self.save_raw_data(output_dir / f'{output_name}.dat')
+        self.snapshot_cnt[self.input_label] += 1
+
+    def save_raw_data(self, filename: str = 'dat.dat') -> str:
+        print(f"{len(self.raw_data)} data saved to {filename}")
+        with open(filename, "w") as f:
+            for y in range(self.raw_data.shape[0]):
+                for x in range(self.raw_data.shape[1]):
+                    f.write(f'{self.raw_data[y, x]:0.3f} ')
+                f.write('\n')
+
+
+def main():
+    app = App()
+    app.run()
+
+if __name__ == '__main__':
+    main()

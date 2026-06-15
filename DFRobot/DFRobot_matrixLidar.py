@@ -114,7 +114,7 @@ class DFRobot_matrixLidar:
 		pkt[self.INDEX_ARGS_NUM_L] = (length+1) & 0xFF
 		pkt[self.INDEX_CMD]        = self.CMD_ALLData
 		self._send_packet(pkt)
-		time.sleep(0.1)
+		time.sleep(0.125)
 		recv_pkt = self._recv_packet(self.CMD_ALLData)
 		if (len(recv_pkt) >= 5) and (recv_pkt[self.INDEX_RES_ERR] == self.ERR_CODE_NONE and recv_pkt[self.INDEX_RES_STATUS] == self.STATUS_SUCCESS):
 			length = recv_pkt[self.INDEX_RES_LEN_L] | (recv_pkt[self.INDEX_RES_LEN_H] << 8)
@@ -140,7 +140,7 @@ class DFRobot_matrixLidar:
 		pkt[3]        = x
 		pkt[4]        = y
 		self._send_packet(pkt)
-		time.sleep(0.1)
+		time.sleep(0.25)
 		recv_pkt = self._recv_packet(self.CMD_FIXED_POINT)
 		if (len(recv_pkt) >= 5) and (recv_pkt[self.INDEX_RES_ERR] == self.ERR_CODE_NONE and recv_pkt[self.INDEX_RES_STATUS] == self.STATUS_SUCCESS):
 			length = recv_pkt[self.INDEX_RES_LEN_L] | (recv_pkt[self.INDEX_RES_LEN_H] << 8)
@@ -195,7 +195,7 @@ class DFRobot_matrixLidar:
 						data = self._recv_data(length)
 						rslt += data
 					return rslt
-			time.sleep(0.07)
+			time.sleep(0.07) # 0.07
 		return [self.ERR_CODE_RES_TIMEOUT]
 
 

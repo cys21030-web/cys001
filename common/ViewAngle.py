@@ -1,10 +1,10 @@
 import math
 class ViewAngle:
-    def __init__(self, view_angle: float = 60, n_horiz: int = 8, n_vert: int = 8, sensor_pitch: float = 30.0):
+    def __init__(self, view_angle: float = 60, n_horiz: int = 8, n_vert: int = 8, sensor_pitch: float = -120.0):
         self.view_angle = view_angle
         self.n_horiz = n_horiz
         self.n_vert = n_vert
-        self.sensor_pitch = math.radians(sensor_pitch)
+        self.sensor_pitch = sensor_pitch
         self.yaws = [
             math.radians(
                 -view_angle / 2 + i * (view_angle / (self.n_horiz - 1))
@@ -22,7 +22,7 @@ class ViewAngle:
     
     def get_coord(self, idx: int, distance: float) -> tuple[float, float, float]:
         yaw, pitch = self.get(idx)
-        pitch += self.sensor_pitch  # Apply sensor pitch offset
+        pitch += math.radians(self.sensor_pitch)  # Apply sensor pitch offset
         x = distance * math.cos(pitch) * math.sin(yaw)
         y = distance * math.cos(pitch) * math.cos(yaw)
         z = distance * math.sin(pitch)
