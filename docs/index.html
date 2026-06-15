@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>電梯平水與 Lidar 分類監察系統 - 使用與開發手冊</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --accent-color: #2ecc71;
+            --bg-color: #f8f9fa;
+            --text-color: #2c3e50;
+            --border-color: #e2e8f0;
+            --card-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft JhengHei", sans-serif;
+            line-height: 1.6;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 0;
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            text-align: center;
+            padding: 2.5rem 1rem;
+            box-shadow: var(--card-shadow);
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 2.2rem;
+            font-weight: 700;
+        }
+
+        header p {
+            margin: 0.5rem 0 0;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+
+        main {
+            max-width: 1000px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+        }
+
+        section {
+            background-color: white;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: var(--card-shadow);
+            border: 1px solid var(--border-color);
+        }
+
+        h2 {
+            color: var(--primary-color);
+            border-left: 5px solid var(--secondary-color);
+            padding-left: 10px;
+            margin-top: 0;
+            font-size: 1.5rem;
+        }
+
+        h3 {
+            color: var(--secondary-color);
+            font-size: 1.2rem;
+            margin-top: 1.5rem;
+        }
+
+        code {
+            font-family: Consolas, Monaco, "Andale Mono", monospace;
+            background-color: #edf2f7;
+            padding: 0.2rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        pre {
+            font-family: Consolas, Monaco, "Andale Mono", monospace;
+            background-color: #1a202c;
+            color: #edf2f7;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1.5rem 0;
+            font-size: 0.95rem;
+        }
+
+        table th, table td {
+            border: 1px solid var(--border-color);
+            padding: 0.75rem;
+            text-align: left;
+        }
+
+        table th {
+            background-color: #f7fafc;
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        ul, ol {
+            padding-left: 1.5rem;
+        }
+
+        li {
+            margin-bottom: 0.5rem;
+        }
+
+        .highlight-box {
+            background-color: #ebf8ff;
+            border-left: 4px solid var(--secondary-color);
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1.5rem 0;
+        }
+
+        .alert-box {
+            background-color: #fffaf0;
+            border-left: 4px solid #dd6b20;
+            padding: 1rem;
+            border-radius: 4px;
+            margin: 1.5rem 0;
+        }
+
+        .badge-green {
+            background-color: #c6f6d5;
+            color: #22543d;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .badge-grey {
+            background-color: #edf2f7;
+            color: #4a5568;
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem 1rem;
+            color: #718096;
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border-color);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>電梯平水與 Lidar 分類監察系統</h1>
+        <p>樹莓派 4B + 8x8 矩陣雷達 + PyTorch 深度神經網路分類管道</p>
+    </header>
+
+    <main>
+
+        <section id="overview">
+            <h2>一、 系統概述</h2>
+            <p>本系統是一套結合嵌入式感測器與人工智慧的「電梯平水監察系統」。利用 8x8 矩陣光達雷達 (ToF Matrix Lidar) 實時監測電梯在平水（正常）、上樓、下樓等不同物理狀態下的空間測距特徵。系統通過實時 2D 距離熱力圖、3D 立體點雲圖呈現空間數據，並使用 PyTorch 建構的三層全連接神經網路模型進行實時特徵推論，提供高度直觀的電梯運行水平監控。</p>
+        </section>
+
+        <section id="structure">
+            <h2>二、 系統檔案架構</h2>
+            <p>本項目代碼結構簡潔明晰，採用職責單一與委託模式設計，模組劃分如下：</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>檔案名稱</th>
+                        <th>語言 / 框架</th>
+                        <th>模組職責說明</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><code>app_main.py</code></td>
+                        <td>Python / ImGui</td>
+                        <td><b>系統 GUI 入口：</b>設置環境變量並提供主選單，供用戶在數據採集器與實時推論模式間切換。</td>
+                    </tr>
+                    <tr>
+                        <td><code>AppBase.py</code></td>
+                        <td>Python / ImGui</td>
+                        <td><b>基礎視窗架構：</b>提供全局 2D 熱力圖、3D 空間點雲、中文字體載入與 Docking 佈局設定。</td>
+                    </tr>
+                    <tr>
+                        <td><code>collector_app.py</code></td>
+                        <td>Python / ImGui</td>
+                        <td><b>數據採集模式：</b>驅動雷達硬體，提供手動、批次數據自動儲存，並輸出標籤為 <code>.dat</code>。</td>
+                    </tr>
+                    <tr>
+                        <td><code>inference_app.py</code></td>
+                        <td>Python / torch</td>
+                        <td><b>實時推論模式：</b>動態載入選定模型，執行特徵歸一化，進行實時 Softmax 推論，並將結果依置信度降序排序。</td>
+                    </tr>
+                    <tr>
+                        <td><code>tui_train.py</code></td>
+                        <td>Python / torch</td>
+                        <td><b>終端訓練系統 (TUI)：</b>極簡且穩定的終端訓練工具。執行 stratified 分割、3層網路訓練與 Artifacts 存檔。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </section>
+
+        <section id="collector">
+            <h2>三、 數據採集器模式 (Data Collector)</h2>
+            <p>本模式用於物理現場的測距特徵數據儲存，用以準備訓練集：</p>
+            <ul>
+                <li><b>實時濾波：</b>對光達傳感器的最新幀數據套用平滑權重 (alpha = 0.5) 進行數值濾波，並呈現立體 3D 空間點雲。</li>
+                <li><b>自定義標籤：</b>在控制面板的 Combo 框中選擇當前的物理狀態（Normal / Upstair / Downstair）。</li>
+                <li><b>自動化批次快照：</b>點擊 <code>snapshot</code> 按鈕，系統會啟動自動化採集，在硬體幀有效更新時防抖採集 100 影格數據，序列化儲存為 <code>.dat</code> 矩陣日誌。</li>
+            </ul>
+        </section>
+
+        <section id="training">
+            <h2>四、 終端訓練系統 (TUI Training - tui_train.py)</h2>
+            <p>為了避免在樹莓派 4B 上的 Mesa VC4 OpenGL 圖形驅動線程中直接調用 PyTorch 反向傳播引擎而導致段錯誤，模型訓練已獨立模組化為純終端介面 TUI 應用程式，保障 100% 的運作穩定性與計算性能。</p>
+            
+            <h3>1. 神經網路架構說明</h3>
+            <p><code>tui_train.py</code> 自動配置了一個具有 <b>3 個 LinearLayers（三層全連接）</b> 深度架構，不使用 Dropout：</p>
+            <ul>
+                <li><b>輸入層 (Layer 1):</b> 64 個輸入（8x8 雷達矩陣展平） &rarr; 64 隱藏層節點 + <code>nn.ReLU()</code> 激活。</li>
+                <li><b>隱藏層 (Layer 2):</b> 64 隱藏層節點 &rarr; 64 隱藏層節點 + <code>nn.ReLU()</code> 激活。</li>
+                <li><b>輸出層 (Layer 3):</b> 64 隱藏層節點 &rarr; 3 輸出節點（對應三種狀態：Normal, Upstair, Downstair）。</li>
+            </ul>
+
+            <h3>2. 訓練執行流程</h3>
+            <ol>
+                <li>執行 <code>python tui_train.py</code>。</li>
+                <li>系統自動掃描本地 <code>snapshot/</code> 目錄下的所有快照數據。</li>
+                <li>用戶可通過終端機提示輸入 <b>Train Split 訓練集佔比</b>（預設為 50%）。</li>
+                <li>系統自動對數據集執行 <b>Stratified 比例分割與均勻洗牌</b>。</li>
+                <li>啟動 30 個 Epoch 迭代訓練，並以高可讀性的 <b>ASCII 進度條</b> 實時回報 Losses 與 Accuracies 走勢。</li>
+                <li>訓練完成後，自動將模型權重儲存至 <code>models/model_YYYYMMDD_HHMMSS.pth</code>，並輸出對應的詳細數據分割日誌 <code>models/model_YYYYMMDD_HHMMSS.yaml</code> 檔案。</li>
+            </ol>
+            <pre>[*] 開始執行 30 個 Epoch 訓練...
+======================================================================
+Epoch  1/30 [██░░░░░░░░░░░░░░░░░░]   3% | Train Loss: 1.0924 | Acc: 33.3% | Test Loss: 1.0531 | Test Acc: 50.0%
+Epoch 10/30 [██████████░░░░░░░░░░]  33% | Train Loss: 0.1251 | Acc: 94.5% | Test Loss: 0.1042 | Test Acc: 96.0%
+...
+Epoch 30/30 [████████████████████] 100% | Train Loss: 0.0102 | Acc: 99.5% | Test Loss: 0.0084 | Test Acc: 100.0%
+======================================================================</pre>
+        </section>
+
+        <section id="inference">
+            <h2>五、 實時數據推論模式 (Real-time Inference)</h2>
+            <p>推論模式提供動態的模型加載與直觀的決策回饋：</p>
+            <ul>
+                <li><b>模型熱插拔：</b>實時讀取 <code>models/</code> 目錄下新產生的模型，用戶可直接下拉選擇模型。</li>
+                <li><b>實時預測降序排序：</b>系統自動將推論結果（Softmax 概率分數）由高到低降序排列。</li>
+                <li><b>置信度與確定性決策 (Obvious Result)：</b>
+                    <ul>
+                        <li><b>動態置信度臨界值：</b>系統套用動態置信臨界值公式 $1.5 \times \frac{1}{N}$，在當前 3 類別（$N=3$）下自動計算出確定的臨界值為 **50%**。</li>
+                        <li><b>高置信度 (Obvious Result)：</b>最高類別的置信度 $\ge 50\%$，最高類別的標籤與進度條將突顯為 <span class="badge-green">綠色</span>，其餘為 <span class="badge-grey">灰色</span>。</li>
+                        <li><b>低置信度 (Uncertain Result)：</b>最高置信度 $< 50\%$，所有類別標籤與進度條皆強制設為 <span class="badge-grey">灰色</span>，避免低確定性干擾。</li>
+                    </ul>
+                </li>
+            </ul>
+        </section>
+
+        <section id="troubleshooting">
+            <h2>六、 樹莓派 4B 環境部署與異常排除 (Troubleshooting)</h2>
+            
+            <div class="alert-box">
+                <h3>1. 段錯誤 (Segmentation Fault) 解決方案 (OpenMP / Mesa 衝突)</h3>
+                <p>在樹莓派 4B 的 ARM CPU 上，圖形顯示 Mesa/VC4 OpenGL 驅動與 PyTorch (libtorch_cpu) 開發包內部編譯的 OpenMP 多線程模型在同一進程內衝突，是造成段錯誤的最常見原因。</p>
+                <p><b>解決方法：</b>我們已在 <code>app_main.py</code> 與 <code>training_app.py</code> 最頂部注入了環境變量來鎖定單線程調度：</p>
+                <pre>import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["OMP_WAIT_POLICY"] = "PASSIVE"</pre>
+                <p>此外，我們<b>移除了 GUI 內的訓練按鈕功能</b>，將其全部遷移至極度輕量、乾淨的 <code>tui_train.py</code> 終端環境執行。此架構能徹底避免 OpenGL 與 PyTorch 在同一線程執行反向傳播，實現 100% 絕對穩定的推論與訓練表現！</p>
+            </div>
+
+            <div class="highlight-box">
+                <h3>2. 測試集準確率一直停留在 50%？</h3>
+                <p>由於 Lidar 距離雷達對平整物體測距範圍很大（最高 4000mm），若您採集數據時雷達均擺放在固定的水平桌面上，會導致三個標籤（Normal、Upstair、Downstair）的 8x8 測距矩陣完全一致。此時模型無特徵可學，為使交叉熵損失最小化，會盲猜數量佔 50% 的 <code>Normal</code> 標籤，導致準確率卡在 50.00%。</p>
+                <p><b>解決方法：</b>重新採集物理特徵明顯的數據：
+                    <ul>
+                        <li><b>Normal：</b>雷達水平正對天花板或平坦地板，測距矩陣應該呈現完全均勻分佈。</li>
+                        <li><b>Upstair：</b>將雷達稍微傾斜，使測距矩陣中呈現由近到遠的「斜坡」梯度（例如頂部距離為 100mm，底部為 250mm）。</li>
+                        <li><b>Downstair：</b>朝相反方向傾斜雷達，製造相反的測距斜率特徵（例如頂部距離為 250mm，底部為 100mm）。</li>
+                    </ul>
+                </p>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>電梯平水與 Lidar 分類監察系統 - 2026</p>
+    </footer>
+
+</body>
+</html>

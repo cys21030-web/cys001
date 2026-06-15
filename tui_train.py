@@ -350,7 +350,7 @@ def main():
     
     # 執行模型訓練
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    total_epochs = 30
+    total_epochs = 300
     
     train_losses, test_losses, train_accuracies, test_accuracies, _ = execute_training_session(
         model, train_loader, test_loader, criterion, optimizer, device, total_epochs

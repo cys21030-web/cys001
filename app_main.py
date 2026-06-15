@@ -10,14 +10,12 @@ import enum
 import logging
 from imgui_bundle import imgui, hello_imgui, implot, implot3d
 from collector_app import CollectorApp
-from training_app import TrainingApp
 from inference_app import InferenceApp
 
-# 定義應用程式的三種運作模式
+# 定義應用程式支援的運作模式 (移除了不穩定的 GUI 訓練模式，改為純 TUI 終端訓練)
 class AppMode(enum.Enum):
-    COLLECTOR = "Collector"  # 數據採集模式
-    TRAINING = "Training"    # 模型訓練與數據檢視模式
-    INFERENCE = "Inference"  # 實時推論監察模式
+    COLLECTOR = "數據採集器"
+    INFERENCE = "實時數據推論"
 
 class MainApp:
     def __init__(self):
@@ -51,9 +49,9 @@ class MainApp:
             print(f"Warning: Could not load font from {font_path}")
 
     def gui_menu(self):
-        # 繪製主選單列，供使用者在採集、訓練、推論模式之間自由切換
+        # 繪製主選單列，供使用者在數據採集器與實時推論監察模式之間自由切換
         if imgui.begin_main_menu_bar():
-            if imgui.begin_menu("Mode", True):
+            if imgui.begin_menu("運作模式選項 (Mode)", True):
                 # 數據採集模式切換
                 clicked_collector, _ = imgui.menu_item(
                     AppMode.COLLECTOR.value, "", self.app_mode == AppMode.COLLECTOR
@@ -62,15 +60,6 @@ class MainApp:
                     if self.app_mode != AppMode.COLLECTOR:
                         self.app_mode = AppMode.COLLECTOR
                         self.current_app = CollectorApp()
-
-                # 模型訓練與檢視模式切換
-                clicked_training, _ = imgui.menu_item(
-                    AppMode.TRAINING.value, "", self.app_mode == AppMode.TRAINING
-                )
-                if clicked_training:
-                    if self.app_mode != AppMode.TRAINING:
-                        self.app_mode = AppMode.TRAINING
-                        self.current_app = TrainingApp()
 
                 # 實時推論監察模式切換
                 clicked_inference, _ = imgui.menu_item(
@@ -97,14 +86,8 @@ class MainApp:
         if self.current_app:
             self.current_app.gui_3d_plot()
 
-    def gui_training_metrics(self):
-        if self.current_app and hasattr(self.current_app, "gui_training_metrics"):
-            self.current_app.gui_training_metrics()
-        else:
-            imgui.text("Training metrics are only available in Training Mode.")
-
     def config_docking(self):
-        # 設定 ImGui 的 Docking 佈局（左側設置欄、中央熱力圖、下方3D雲點圖、右側訓練指標欄）
+        # 設定 ImGui 的 Docking 佈局（左側設置欄、中央熱力圖、下方3D雲點圖）
         docking_params = hello_imgui.DockingParams()
 
         split_left = hello_imgui.DockingSplit()
@@ -121,36 +104,29 @@ class MainApp:
 
         docking_params.docking_splits = [split_left, split_bot]
 
-        # 註冊各個停靠視窗與其對應的渲染回呼函數
+        # 註冊點雲圖、熱力圖與參數設定視窗（轉換標題為繁體中文）
         w_3dplot = hello_imgui.DockableWindow(
-            label_ = 'Point cloud',
+            label_ = '三維空間點雲圖 (3D Point Cloud)',
             dock_space_name_ = 'BottomSpace',
             gui_function_ = self.gui_3d_plot
         )
         
         w_heatmap = hello_imgui.DockableWindow(
-            label_ = 'Raw Data',
+            label_ = '實時距離二維熱力圖 (Raw Heatmap)',
             dock_space_name_ = 'MainDockSpace',
             gui_function_ = self.gui_heat_map
         )
 
         w_settings = hello_imgui.DockableWindow(
-            label_ = 'Settings',
+            label_ = '控制參數與推論面板 (Control Settings)',
             dock_space_name_ = 'LeftSpace',
             gui_function_ = self.gui_settings
-        )
-
-        w_training = hello_imgui.DockableWindow(
-            label_ = 'Training Metrics',
-            dock_space_name_ = 'MainDockSpace',
-            gui_function_ = self.gui_training_metrics
         )
 
         docking_params.dockable_windows = [
             w_heatmap,
             w_3dplot,
-            w_settings,
-            w_training
+            w_settings
         ]
         return docking_params
 
@@ -164,7 +140,7 @@ class MainApp:
         runner_params = hello_imgui.RunnerParams()
 
         runner_params.callbacks.show_gui = self.gui
-        runner_params.app_window_params.window_title = "Lidar App"
+        runner_params.app_window_params.window_title = "電梯平水與Lidar分類監察系統"
         runner_params.app_window_params.window_geometry.size = (1280, 960)
         runner_params.app_window_params.restore_previous_geometry = True
         runner_params.callbacks.load_additional_fonts = self.load_custom_fonts
