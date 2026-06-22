@@ -18,6 +18,12 @@ from AppBase import App as AppBase
 
 
 class InferenceApp(AppBase):
+    """即時推論模式。
+
+    此模式會載入已訓練好的模型，針對最新感測資料做前向推論，
+    並在介面上顯示每個類別的機率與判定結果。
+    """
+
     def __init__(self):
         super().__init__()
         

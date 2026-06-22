@@ -7,6 +7,12 @@ import logging
 import threading
 
 class ToFSensor:
+    """ToF 感測器封裝類別。
+
+    這個類別負責與硬體感測器進行初始化、資料讀取與狀態管理。
+    它會在背景執行緒中持續抓取感測器資料，並把最新一幀資料提供給上層應用。
+    """
+
     def __init__(self, address: int = 0x33):
         self.address = address
         self.status = "尚未初始化"

@@ -14,6 +14,12 @@ from AppBase import App as AppBase
 
 
 class CollectorApp(AppBase):
+    """資料採集模式。
+
+    此模式用於從 ToF 感測器讀取原始距離數據，並將其整理成可訓練的樣本。
+    使用者可以選擇標籤、啟動批次採集，並把結果保存到 snapshot/ 之下。
+    """
+
     def __init__(self):
         super().__init__()
         

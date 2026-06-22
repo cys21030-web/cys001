@@ -18,6 +18,12 @@ class AppMode(enum.Enum):
     INFERENCE = "實時數據分析"
 
 class MainApp:
+    """主應用程式控制器。
+
+    這個類別扮演整個系統的入口角色，負責初始化 ImGui 環境、切換不同工作模式，
+    並把畫面渲染與互動事件委派給資料採集或即時推論子模組。
+    """
+
     def __init__(self):
         logging.info("初始化主應用程式")
         

@@ -13,8 +13,10 @@ configure_matplotlib_chinese()
 
 
 class WorldCoord:
-    """
-    世界坐標系中的點，包含 x, y, z 三個坐標。
+    """將距離矩陣轉成 3D 點雲資料。
+
+    這個類別會依據感測器視角與每個距離值，計算出對應的世界座標位置，
+    以便在 3D 視圖中顯示感測器掃描到的空間分布。
     """
     def __init__(self, raw_data: np.ndarray, view_angles: ViewAngle):
         

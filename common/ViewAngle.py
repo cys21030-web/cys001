@@ -1,5 +1,13 @@
 import math
+
+
 class ViewAngle:
+    """感測器視角與投影參數設定。
+
+    此類別用來建立雷達感測器的觀測角度分布，並把每個距離點映射成 3D 空間座標。
+    這些參數會影響 3D 點雲圖的呈現方式與推論資料的幾何意義。
+    """
+
     def __init__(self, view_angle: float = 60, n_horiz: int = 8, n_vert: int = 8, sensor_pitch: float = -120.0):
         self.view_angle = view_angle
         self.n_horiz = n_horiz
