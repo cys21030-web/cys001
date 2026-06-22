@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>電梯平水與 Lidar 分類監察系統 - 使用與開發手冊</title>
+    <title>升降機平層誤差監察系統 - 使用與開發手冊</title>
     <style>
         :root {
             --primary-color: #2c3e50;
@@ -165,7 +165,7 @@
 <body>
 
     <header>
-        <h1>電梯平水與 Lidar 分類監察系統</h1>
+        <h1>升降機平層誤差監察系統</h1>
         <p>樹莓派 4B + 8x8 矩陣雷達 + PyTorch 深度神經網路分類管道</p>
     </header>
 
@@ -173,7 +173,23 @@
 
         <section id="overview">
             <h2>一、 系統概述</h2>
-            <p>本系統是一套結合嵌入式感測器與人工智慧的「電梯平水監察系統」。利用 8x8 矩陣光達雷達 (ToF Matrix Lidar) 實時監測電梯在平水（正常）、上樓、下樓等不同物理狀態下的空間測距特徵。系統通過實時 2D 距離熱力圖、3D 立體點雲圖呈現空間數據，並使用 PyTorch 建構的三層全連接神經網路模型進行實時特徵推論，提供高度直觀的電梯運行水平監控。</p>
+            <p>本系統是一套結合嵌入式感測器與人工智慧的「升降機平層誤差監察系統」。利用 8x8 矩陣光達雷達 (ToF Matrix Lidar) 實時監測升降機在正常、上樓、下樓與無事件等不同物理狀態下的空間測距特徵。系統提供即時 2D 距離熱力圖、3D 點雲圖、資料採集、終端訓練與實時推論等完整流程，適合用於研發與現場驗證。</p>
+            <div class="highlight-box">
+                <strong>目前功能重點：</strong> 感測器資料擷取、標記式資料採集、PyTorch 模型訓練、模型權重輸出、即時推論與結果視覺化。
+            </div>
+        </section>
+
+        <section id="plain-language">
+            <h2>二、 用最簡單的方式理解這個系統</h2>
+            <p>這個系統的目標很簡單：讓人不用看太多技術術語，也能知道升降機在運行時，是否出現了「不平層」的可疑情況。</p>
+            <ul>
+                <li><b>先收集資料：</b>感測器會像「看見」周圍空間一樣，記錄一組距離數值。</li>
+                <li><b>再讓電腦學習：</b>系統把這些數值當作「特徵」，讓機器學會分辨正常與異常情況。</li>
+                <li><b>最後做判斷：</b>當感測器有新資料進來時，系統會快速猜測目前更像哪一種情況，並顯示信心程度。</li>
+            </ul>
+            <div class="highlight-box">
+                <strong>一句話總結：</strong> 這是一套「用感測器 + 機器學習，協助判斷升降機是否有平層異常」的監測系統。
+            </div>
         </section>
 
         <section id="structure">
@@ -222,39 +238,46 @@
             <p>本模式用於物理現場的測距特徵數據儲存，用以準備訓練集：</p>
             <ul>
                 <li><b>實時濾波：</b>對光達傳感器的最新幀數據套用平滑權重 (alpha = 0.5) 進行數值濾波，並呈現立體 3D 空間點雲。</li>
-                <li><b>自定義標籤：</b>在控制面板的 Combo 框中選擇當前的物理狀態（Normal / Upstair / Downstair）。</li>
-                <li><b>自動化批次快照：</b>點擊 <code>snapshot</code> 按鈕，系統會啟動自動化採集，在硬體幀有效更新時防抖採集 100 影格數據，序列化儲存為 <code>.dat</code> 矩陣日誌。</li>
+                <li><b>自定義標籤：</b>在控制面板的 Combo 框中選擇當前的物理狀態（正常、上樓、下樓、無事件）。</li>
+                <li><b>自動化批次快照：</b>點擊開始採集按鈕，系統會在有效影格更新時自動收集樣本，並序列化儲存為 <code>.dat</code> 矩陣資料。</li>
+                <li><b>輸出位置：</b>採集結果會輸出到 <code>snapshot/</code> 之下的對應類別資料夾。</li>
             </ul>
         </section>
 
         <section id="training">
             <h2>四、 終端訓練系統 (TUI Training - tui_train.py)</h2>
-            <p>為了避免在樹莓派 4B 上的 Mesa VC4 OpenGL 圖形驅動線程中直接調用 PyTorch 反向傳播引擎而導致段錯誤，模型訓練已獨立模組化為純終端介面 TUI 應用程式，保障 100% 的運作穩定性與計算性能。</p>
+            <p>為了避免在樹莓派 4B 上的 Mesa VC4 OpenGL 圖形驅動線程中直接調用 PyTorch 反向傳播引擎而導致段錯誤，模型訓練已獨立模組化為純終端介面 TUI 應用程式，保障穩定性與計算性能。</p>
             
             <h3>1. 神經網路架構說明</h3>
-            <p><code>tui_train.py</code> 自動配置了一個具有 <b>3 個 LinearLayers（三層全連接）</b> 深度架構，不使用 Dropout：</p>
+            <p><code>tui_train.py</code> 自動配置一個具有 <b>3 個 Linear Layer</b> 的深度架構，不使用 Dropout：</p>
             <ul>
-                <li><b>輸入層 (Layer 1):</b> 64 個輸入（8x8 雷達矩陣展平） &rarr; 64 隱藏層節點 + <code>nn.ReLU()</code> 激活。</li>
-                <li><b>隱藏層 (Layer 2):</b> 64 隱藏層節點 &rarr; 64 隱藏層節點 + <code>nn.ReLU()</code> 激活。</li>
-                <li><b>輸出層 (Layer 3):</b> 64 隱藏層節點 &rarr; 3 輸出節點（對應三種狀態：Normal, Upstair, Downstair）。</li>
+                <li><b>輸入層 (Layer 1):</b> 64 個輸入（8x8 雷達矩陣展平） &rarr; 64 隱藏層節點 + <code>nn.ReLU()</code>。</li>
+                <li><b>隱藏層 (Layer 2):</b> 64 隱藏層節點 &rarr; 64 隱藏層節點 + <code>nn.ReLU()</code>。</li>
+                <li><b>輸出層 (Layer 3):</b> 64 隱藏層節點 &rarr; 4 個輸出節點（對應正常、上樓、下樓、無事件）。</li>
             </ul>
 
             <h3>2. 訓練執行流程</h3>
             <ol>
-                <li>執行 <code>python tui_train.py</code>。</li>
-                <li>系統自動掃描本地 <code>snapshot/</code> 目錄下的所有快照數據。</li>
-                <li>用戶可通過終端機提示輸入 <b>Train Split 訓練集佔比</b>（預設為 50%）。</li>
-                <li>系統自動對數據集執行 <b>Stratified 比例分割與均勻洗牌</b>。</li>
-                <li>啟動 30 個 Epoch 迭代訓練，並以高可讀性的 <b>ASCII 進度條</b> 實時回報 Losses 與 Accuracies 走勢。</li>
-                <li>訓練完成後，自動將模型權重儲存至 <code>models/model_YYYYMMDD_HHMMSS.pth</code>，並輸出對應的詳細數據分割日誌 <code>models/model_YYYYMMDD_HHMMSS.yaml</code> 檔案。</li>
+                <li>執行 <code>python3 tui_train.py</code>。</li>
+                <li>系統自動掃描 <code>snapshot/</code> 中的各類別樣本。</li>
+                <li>輸入訓練集分割比例（預設 50%）。</li>
+                <li>系統進行 stratified 切分與洗牌。</li>
+                <li>啟動多個 epoch 訓練，並實時輸出訓練/驗證損失與準確率。</li>
+                <li>訓練完成後，自動輸出模型與訓練統計圖，存放於 <code>models/training_YYYYMMDD_HHMMSS/</code>。</li>
             </ol>
-            <pre>[*] 開始執行 30 個 Epoch 訓練...
-======================================================================
-Epoch  1/30 [██░░░░░░░░░░░░░░░░░░]   3% | Train Loss: 1.0924 | Acc: 33.3% | Test Loss: 1.0531 | Test Acc: 50.0%
-Epoch 10/30 [██████████░░░░░░░░░░]  33% | Train Loss: 0.1251 | Acc: 94.5% | Test Loss: 0.1042 | Test Acc: 96.0%
+            <pre>[*] 開始執行 300 個 Epoch 訓練...
+Epoch  1/300 [█░░░░░░░░░░░░░░░░░░]   0% | 訓練損失: 1.09 | 準確率: 33.3% | 驗證損失: 1.05 | 驗證準確率: 50.0%
 ...
-Epoch 30/30 [████████████████████] 100% | Train Loss: 0.0102 | Acc: 99.5% | Test Loss: 0.0084 | Test Acc: 100.0%
-======================================================================</pre>
+Epoch 300/300 [████████████████████] 100% | 訓練損失: 0.01 | 準確率: 99.5% | 驗證損失: 0.01 | 驗證準確率: 100.0%</pre>
+
+            <h3>3. 輸出檔案</h3>
+            <ul>
+                <li><code>.pth</code>：模型權重與配置</li>
+                <li><code>.yaml</code>：訓練摘要與資料切分資訊</li>
+                <li><code>training_stats.png</code>：訓練曲線圖</li>
+                <li><code>frames/</code>：每個 epoch 的可視化影像</li>
+                <li><code>training_progress.mp4</code>：訓練動畫影片</li>
+            </ul>
         </section>
 
         <section id="inference">
@@ -265,9 +288,9 @@ Epoch 30/30 [████████████████████] 100% 
                 <li><b>實時預測降序排序：</b>系統自動將推論結果（Softmax 概率分數）由高到低降序排列。</li>
                 <li><b>置信度與確定性決策 (Obvious Result)：</b>
                     <ul>
-                        <li><b>動態置信度臨界值：</b>系統套用動態置信臨界值公式 $1.5 \times \frac{1}{N}$，在當前 3 類別（$N=3$）下自動計算出確定的臨界值為 **50%**。</li>
-                        <li><b>高置信度 (Obvious Result)：</b>最高類別的置信度 $\ge 50\%$，最高類別的標籤與進度條將突顯為 <span class="badge-green">綠色</span>，其餘為 <span class="badge-grey">灰色</span>。</li>
-                        <li><b>低置信度 (Uncertain Result)：</b>最高置信度 $< 50\%$，所有類別標籤與進度條皆強制設為 <span class="badge-grey">灰色</span>，避免低確定性干擾。</li>
+                        <li><b>動態置信度臨界值：</b>系統套用動態置信臨界值公式 $1.5 \times \frac{1}{N}$，在目前實作中共有 4 個類別（$N=4$），因此臨界值約為 **37.5%**。</li>
+                        <li><b>高置信度 (Obvious Result)：</b>最高類別的置信度 $\ge 37.5\%$，最高類別的標籤與進度條將突顯為 <span class="badge-green">綠色</span>，其餘為 <span class="badge-grey">灰色</span>。</li>
+                        <li><b>低置信度 (Uncertain Result)：</b>最高置信度 $< 37.5\%$，所有類別標籤與進度條皆強制設為 <span class="badge-grey">灰色</span>，避免低確定性干擾。</li>
                     </ul>
                 </li>
             </ul>
@@ -289,7 +312,7 @@ os.environ["OMP_WAIT_POLICY"] = "PASSIVE"</pre>
 
             <div class="highlight-box">
                 <h3>2. 測試集準確率一直停留在 50%？</h3>
-                <p>由於 Lidar 距離雷達對平整物體測距範圍很大（最高 4000mm），若您採集數據時雷達均擺放在固定的水平桌面上，會導致三個標籤（Normal、Upstair、Downstair）的 8x8 測距矩陣完全一致。此時模型無特徵可學，為使交叉熵損失最小化，會盲猜數量佔 50% 的 <code>Normal</code> 標籤，導致準確率卡在 50.00%。</p>
+                <p>目前程式內建的有效距離值上限設定為 500。若您採集數據時雷達位置幾乎沒有變化，或所有樣本都非常相似，模型就很難從資料中找到足夠的差異，因此容易只做常見類別的猜測，導致準確率看起來停在一個較低的水平。</p>
                 <p><b>解決方法：</b>重新採集物理特徵明顯的數據：
                     <ul>
                         <li><b>Normal：</b>雷達水平正對天花板或平坦地板，測距矩陣應該呈現完全均勻分佈。</li>
@@ -303,7 +326,7 @@ os.environ["OMP_WAIT_POLICY"] = "PASSIVE"</pre>
     </main>
 
     <footer>
-        <p>電梯平水與 Lidar 分類監察系統 - 2026</p>
+        <p>升降機平層誤差監察系統 - 2026</p>
     </footer>
 
 </body>

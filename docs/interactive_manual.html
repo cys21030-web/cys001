@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>電梯平水與 Lidar 分類監察系統 - 互動式說明文件</title>
+  <title>升降機平層誤差監察系統 - 互動式說明文件</title>
   <style>
     :root {
       --bg: #f5f7fb;
@@ -23,7 +23,8 @@
       font-family: "Segoe UI", "Microsoft JhengHei", Arial, sans-serif;
       background: var(--bg);
       color: var(--text);
-      line-height: 1.7;
+      line-height: 1.8;
+      font-size: 18px;
     }
 
     header {
@@ -32,17 +33,17 @@
       padding: 2.2rem 1.2rem;
       box-shadow: 0 6px 18px rgba(0,0,0,.12);
     }
-    header h1 { margin: 0 0 .3rem; font-size: 2rem; }
-    header p { margin: 0; opacity: .95; }
+    header h1 { margin: 0 0 .3rem; font-size: 2.35rem; font-weight: 800; }
+    header p { margin: 0; opacity: .95; font-size: 1.08rem; }
 
-    .wrap { max-width: 1120px; margin: 0 auto; padding: 1rem 1rem 2rem; }
+    .wrap { max-width: 1160px; margin: 0 auto; padding: 1rem 1rem 2rem; }
     .hero-card, .panel, .step-card {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 16px;
       box-shadow: 0 8px 20px rgba(15, 23, 42, .06);
-      padding: 1.1rem 1.2rem;
-      margin-bottom: 1rem;
+      padding: 1.25rem 1.35rem;
+      margin-bottom: 1.1rem;
     }
 
     .nav { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
@@ -50,10 +51,11 @@
       border: 0;
       background: #e8f1fb;
       color: var(--primary);
-      padding: .6rem .9rem;
+      padding: .7rem 1rem;
       border-radius: 999px;
       cursor: pointer;
-      font-weight: 600;
+      font-weight: 700;
+      font-size: 1rem;
     }
     .nav button.active {
       background: var(--primary);
@@ -61,8 +63,13 @@
     }
 
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; }
-    .card { background: #f8fbff; border: 1px solid var(--border); border-radius: 12px; padding: .9rem; }
-    .card h3 { margin-top: 0; margin-bottom: .4rem; color: var(--secondary); }
+    .card {
+      background: linear-gradient(135deg, #f8fbff 0%, #eef6ff 100%);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem;
+    }
+    .card h3 { margin-top: 0; margin-bottom: .45rem; color: var(--secondary); font-size: 1.12rem; }
 
     .flow {
       display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; justify-content: center;
@@ -82,7 +89,7 @@
 
     .accordion { border: 1px solid var(--border); border-radius: 10px; margin-top: .7rem; overflow: hidden; }
     .accordion button {
-      width: 100%; text-align: left; padding: .85rem 1rem; border: 0; background: #f8fbff; font-size: 1rem; font-weight: 700; color: var(--primary); cursor: pointer;
+      width: 100%; text-align: left; padding: .9rem 1rem; border: 0; background: linear-gradient(90deg, #f3f8ff 0%, #eef6ff 100%); font-size: 1.03rem; font-weight: 800; color: var(--primary); cursor: pointer;
     }
     .accordion .content { display: none; padding: 0 1rem 1rem; }
     .accordion.open .content { display: block; }
@@ -108,18 +115,28 @@
     th, td { border: 1px solid var(--border); padding: .7rem; text-align: left; }
     th { background: #f8fbff; }
 
-    .badge { display: inline-block; padding: .23rem .55rem; border-radius: 999px; background: #ecfdf3; color: #166534; font-size: .8rem; font-weight: 700; }
-    .warning { color: var(--warning); font-weight: 700; }
+    .badge { display: inline-block; padding: .25rem .6rem; border-radius: 999px; background: #ecfdf3; color: #166534; font-size: .85rem; font-weight: 800; }
+    .warning { color: var(--warning); font-weight: 800; }
 
-    footer { text-align: center; color: var(--muted); padding: 1.2rem 0 2rem; font-size: .95rem; }
+    .highlight-text {
+      background: linear-gradient(90deg, #fff7e6 0%, #fff3d6 100%);
+      border-left: 5px solid var(--warning);
+      padding: .8rem 1rem;
+      border-radius: 10px;
+      font-weight: 700;
+      color: #7a3f00;
+    }
+
+    footer { text-align: center; color: var(--muted); padding: 1.2rem 0 2rem; font-size: 1rem; }
     @media (max-width: 768px) { .flow { flex-direction: column; } .flow .arrow { transform: rotate(90deg); } }
   </style>
 </head>
 <body>
   <header>
     <div class="wrap">
-      <h1>電梯平水與 Lidar 分類監察系統</h1>
+      <h1>升降機平層誤差監察系統</h1>
       <p>繁體中文互動式說明文件：系統架構、資料流程、訓練流程與即時推論</p>
+      <p style="margin-top: .6rem;"><a href="index.html" style="color: white; text-decoration: underline;">查看概要版首頁說明</a></p>
     </div>
   </header>
 
@@ -149,7 +166,20 @@
     <section id="overview" class="tabs active">
       <div class="panel">
         <h2>一、 系統總覽</h2>
-        <p>本系統整合了 <strong>8x8 矩陣雷達</strong>、<strong>PyTorch 神經網路</strong>與 <strong>互動式 GUI / TUI</strong>，用於監測電梯在不同物理狀態下的距離特徵，例如正常、上樓、下樓與無事件。系統可分為三個主要階段：資料採集、模型訓練與即時推論。</p>
+        <p class="highlight-text">本系統整合了 <strong>8x8 矩陣雷達</strong>、<strong>PyTorch 神經網路</strong>與 <strong>互動式 GUI / TUI</strong>，用於監測升降機在不同物理狀態下的距離特徵，例如正常、上樓、下樓與無事件。</p>
+        <p>系統可分為三個主要階段：資料採集、模型訓練與即時推論。</p>
+
+        <div class="accordion open">
+          <button type="button">給非資訊背景人士的簡化版說明</button>
+          <div class="content">
+            <p>這套系統可以把「感測器看到的距離變化」變成一種簡單的判斷結果。它像是替人類做一個快速的「觀察員」，先把資料收起來，再學習哪些情況比較像正常、哪些情況比較像異常，最後再給出一個建議。</p>
+            <ul>
+              <li>先收集資料：感測器讀取一組距離數值。</li>
+              <li>再讓電腦學習：把資料整理後，讓模型找出不同情況的特徵。</li>
+              <li>最後做判斷：新資料進來時，系統會快速判斷目前更像哪一種情況。</li>
+            </ul>
+          </div>
+        </div>
         <div class="grid">
           <div class="card">
             <h3>資料採集</h3>
@@ -207,7 +237,7 @@
     <section id="training" class="tabs">
       <div class="panel">
         <h2>三、 訓練流程說明</h2>
-        <p>訓練流程以純終端機 TUI 形式執行，減少圖形介面與 PyTorch 訓練在同一環境中互相衝突的風險。</p>
+        <p class="highlight-text">訓練流程以純終端機 TUI 形式執行，減少圖形介面與 PyTorch 訓練在同一環境中互相衝突的風險。</p>
 
         <div class="accordion open">
           <button type="button">訓練流程步驟</button>
@@ -260,7 +290,7 @@ Epoch 300/300 [████████████████████] 100
     <section id="inference" class="tabs">
       <div class="panel">
         <h2>四、 推論流程說明</h2>
-        <p>推論模式會載入最新訓練完成的模型，對即時感測資料進行預處理與分類，並將結果以可讀方式呈現。</p>
+        <p class="highlight-text">推論模式會載入最新訓練完成的模型，對即時感測資料進行預處理與分類，並將結果以可讀方式呈現。</p>
 
         <div class="accordion open">
           <button type="button">推論流程</button>
@@ -279,7 +309,7 @@ Epoch 300/300 [████████████████████] 100
         <div class="accordion">
           <button type="button">判定邏輯（點此展開）</button>
           <div class="content">
-            <p>系統會依據機率分數判斷是否為明顯結果：若最高類別機率至少達到動態閾值，則以高亮方式顯示；否則顯示為不確定結果。</p>
+            <p>系統會依據機率分數判斷是否為明顯結果：目前實作共有 4 個類別，動態閾值為 $1.5 \times \frac{1}{4} \approx 37.5\%$；若最高類別機率至少達到此值，則以高亮方式顯示；否則顯示為不確定結果。</p>
             <p class="warning">當分類結果不明確時，介面會以灰色條狀顯示，避免誤導使用者。</p>
           </div>
         </div>

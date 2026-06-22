@@ -140,7 +140,7 @@ class MainApp:
         runner_params = hello_imgui.RunnerParams()
 
         runner_params.callbacks.show_gui = self.gui
-        runner_params.app_window_params.window_title = "電梯平水監察系統"
+        runner_params.app_window_params.window_title = "升降機平層誤差監察系統"
         runner_params.app_window_params.window_geometry.size = (1280, 960)
         runner_params.app_window_params.restore_previous_geometry = True
         runner_params.callbacks.load_additional_fonts = self.load_custom_fonts

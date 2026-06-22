@@ -28,7 +28,7 @@ class CollectorApp(AppBase):
         self.last_snapshot_frame = 0
         self.last_disp_frame = 0
 
-        self.__win_title = "電梯平水監察儀"
+        self.__win_title = "升降機平層誤差監察儀"
 
     @property
     def view_angle(self):
