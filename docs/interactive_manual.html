@@ -166,20 +166,20 @@
     <section id="overview" class="tabs active">
       <div class="panel">
         <h2>一、 系統總覽</h2>
-        <p class="highlight-text">本系統整合了 <strong>8x8 矩陣雷達</strong>、<strong>簡單的 PyTorch 模型</strong>與 <strong>GUI / TUI 介面</strong>，用於監測升降機在不同狀態下的距離特徵，例如正常、上樓、下樓與無事件。</p>
-        <p>系統可分為三個主要階段：資料採集、模型訓練與即時推論。這些流程都盡量寫得簡單，方便初學者理解。</p>
+        <p class="highlight-text">這個系統使用 <strong>8x8 矩陣雷達</strong>、<strong>簡單的 PyTorch 模型</strong>與 <strong>GUI / TUI 介面</strong>，來觀察升降機在不同狀態下的距離變化。</p>
+        <p>系統主要分成三個步驟：收集資料、訓練模型、以及做即時判斷。</p>
         <div class="highlight-text" style="margin-top: 1rem;">
-          <strong>簡單提醒：</strong> 如果你是第一次使用，先從收集幾筆樣本開始，接著再訓練模型，最後再看推論結果。這樣最容易上手。
+          <strong>提醒：</strong> 第一次使用時，可以先收集幾筆資料，再看模型的結果。
         </div>
 
         <div class="accordion open">
           <button type="button">說明</button>
           <div class="content">
-            <p>這套系統可以把「感測器看到的距離變化」變成一種簡單的判斷結果。它像是一個簡單的觀察工具：先把資料收起來，再讓電腦學習哪些情況比較像正常、哪些情況比較像異常，最後再給出一個建議。</p>
+            <p>這個系統會先把感測器讀到的距離資料收起來，再讓模型用這些資料來判斷目前比較像哪一種情況。</p>
             <ul>
               <li>先收集資料：感測器讀取一組距離數值。</li>
-              <li>再讓電腦學習：把資料整理後，讓模型找出不同情況的特徵。</li>
-              <li>最後做判斷：新資料進來時，系統會快速判斷目前更像哪一種情況。</li>
+              <li>再讓模型學習：把資料整理後，讓系統找出不同情況的特徵。</li>
+              <li>最後做判斷：新的資料進來時，系統會顯示比較像哪一種情況。</li>
             </ul>
           </div>
         </div>
