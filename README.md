@@ -113,5 +113,5 @@ python3 app_main.py
 
 ## 文件說明
 
-- `docs/index.html`：簡要的專案首頁與使用說明
-- `docs/interactive_manual.html`：互動式說明文件，內容較完整，適合做為操作手冊
+- `docs/index.html`
+- `docs/interactive_manual.html`
