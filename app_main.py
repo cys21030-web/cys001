@@ -20,29 +20,28 @@ class AppMode(enum.Enum):
 class MainApp:
     """主應用程式控制器。
 
-    這個類別扮演整個系統的入口角色，負責初始化 ImGui 環境、切換不同工作模式，
-    並把畫面渲染與互動事件委派給資料採集或即時推論子模組。
+    這個類別負責開啟主畫面、切換不同模式，並把畫面交給資料採集或即時推論的子功能。
     """
 
     def __init__(self):
         logging.info("初始化主應用程式")
         
         # 初始化 ImGui、ImPlot 與 ImPlot3D 上下文，確保繪圖組件正常運作
-        self.ctx_imgui = imgui.get_current_context()
-        if self.ctx_imgui is None:
-            self.ctx_imgui = imgui.create_context()
-            imgui.set_current_context(self.ctx_imgui)
+        self.imgui_context = imgui.get_current_context()
+        if self.imgui_context is None:
+            self.imgui_context = imgui.create_context()
+            imgui.set_current_context(self.imgui_context)
 
-        self.ctx_implot = implot.get_current_context()
-        if self.ctx_implot is None:
-            self.ctx_implot = implot.create_context()
+        self.implot_context = implot.get_current_context()
+        if self.implot_context is None:
+            self.implot_context = implot.create_context()
 
-        self.ctx_implot3d = implot3d.get_current_context()
-        if self.ctx_implot3d is None:
-            self.ctx_implot3d = implot3d.create_context()
+        self.implot3d_context = implot3d.get_current_context()
+        if self.implot3d_context is None:
+            self.implot3d_context = implot3d.create_context()
 
-        self.current_app = None
-        self.app_mode = None
+        self.active_app = None
+        self.current_mode = None
 
     def load_custom_fonts(self):
         # 載入自定義的中文字型，確保繁體中文介面正常顯示，不出現亂碼
@@ -60,37 +59,37 @@ class MainApp:
             if imgui.begin_menu("運作模式 (Mode)", True):
                 # 數據採集模式切換
                 clicked_collector, _ = imgui.menu_item(
-                    AppMode.COLLECTOR.value, "", self.app_mode == AppMode.COLLECTOR
+                    AppMode.COLLECTOR.value, "", self.current_mode == AppMode.COLLECTOR
                 )
                 if clicked_collector:
-                    if self.app_mode != AppMode.COLLECTOR:
-                        self.app_mode = AppMode.COLLECTOR
-                        self.current_app = CollectorApp()
+                    if self.current_mode != AppMode.COLLECTOR:
+                        self.current_mode = AppMode.COLLECTOR
+                        self.active_app = CollectorApp()
 
                 # 實時推論監察模式切換
                 clicked_inference, _ = imgui.menu_item(
-                    AppMode.INFERENCE.value, "", self.app_mode == AppMode.INFERENCE
+                    AppMode.INFERENCE.value, "", self.current_mode == AppMode.INFERENCE
                 )
                 if clicked_inference:
-                    if self.app_mode != AppMode.INFERENCE:
-                        self.app_mode = AppMode.INFERENCE
-                        self.current_app = InferenceApp()
+                    if self.current_mode != AppMode.INFERENCE:
+                        self.current_mode = AppMode.INFERENCE
+                        self.active_app = InferenceApp()
                 
                 imgui.end_menu()
             imgui.end_main_menu_bar()
 
     # 以下方法將視窗渲染邏輯委託給目前正啟用的子模式應用程式 (Delegation Pattern)
     def gui_settings(self):
-        if self.current_app:
-            self.current_app.gui_settings()
+        if self.active_app:
+            self.active_app.gui_settings()
 
     def gui_heat_map(self):
-        if self.current_app:
-            self.current_app.gui_heat_map()
+        if self.active_app:
+            self.active_app.gui_heat_map()
             
     def gui_3d_plot(self):
-        if self.current_app:
-            self.current_app.gui_3d_plot()
+        if self.active_app:
+            self.active_app.gui_3d_plot()
 
     def config_docking(self):
         # 設定 ImGui 的 Docking 佈局（左側設置欄、中央熱力圖、下方3D雲點圖）
@@ -138,8 +137,8 @@ class MainApp:
 
     def gui(self):
         self.gui_menu()
-        if self.current_app:
-            self.current_app.gui()
+        if self.active_app:
+            self.active_app.gui()
 
     def run(self):
         # 配置與啟動 hello_imgui 渲染引擎

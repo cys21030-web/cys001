@@ -17,28 +17,28 @@ class App:
         logging.info("初始化應用程式")
         
         # 設置基礎的 ImGui 與 ImPlot / ImPlot3D 記憶體上下文，保證渲染正常
-        self.ctx_imgui = imgui.get_current_context()
-        if self.ctx_imgui is None:
-            self.ctx_imgui = imgui.create_context()
-            imgui.set_current_context(self.ctx_imgui)
+        self.imgui_context = imgui.get_current_context()
+        if self.imgui_context is None:
+            self.imgui_context = imgui.create_context()
+            imgui.set_current_context(self.imgui_context)
 
-        self.ctx_implot = implot.get_current_context()
-        if self.ctx_implot is None:
-            self.ctx_implot = implot.create_context()
+        self.implot_context = implot.get_current_context()
+        if self.implot_context is None:
+            self.implot_context = implot.create_context()
 
-        self.ctx_implot3d = implot3d.get_current_context()
-        if self.ctx_implot3d is None:
-            self.ctx_implot3d = implot3d.create_context()
+        self.implot3d_context = implot3d.get_current_context()
+        if self.implot3d_context is None:
+            self.implot3d_context = implot3d.create_context()
 
         # 預設 3D 圖表的觀察仰角與視角
-        self.plot_box_elvation = 20
+        self.plot_box_elevation = 20
         self.plot_box_azimuth = 80
 
         # 當前幀的 Lidar 3D 世界座標點雲與 2D heatmap 距離矩陣數據
         self.cloud_points = None
         self.raw_data = np.zeros((8, 8), dtype=np.float32)
 
-        self.__win_title = "Base App"
+        self.window_title = "Base App"
         self.__view_angle = 0
         self.__sensor_pitch = 0
         self.__sensor_ready = True
@@ -51,7 +51,7 @@ class App:
 
     @property
     def win_title(self):
-        return self.__win_title
+        return self.window_title
 
     @property
     def view_angle(self):
@@ -83,7 +83,7 @@ class App:
 
     def load_custom_fonts(self):
         # 載入中文字型，防止渲染亂碼
-        imgui.set_current_context(self.ctx_imgui)
+        imgui.set_current_context(self.imgui_context)
         io = imgui.get_io()
         font_path = "LXGWWenKaiMonoTC-Regular.ttf" 
         font_size = 20.0
@@ -159,7 +159,7 @@ class App:
         changed, self.sensor_pitch = imgui.slider_float("感測器俯仰角", self.sensor_pitch, -360, 360.0)
 
         imgui.separator_text('3D 圖表')
-        changed, self.plot_box_elvation = imgui.slider_float('仰角', self.plot_box_elvation, -90.0, 90.0)
+        changed, self.plot_box_elevation = imgui.slider_float('仰角', self.plot_box_elevation, -90.0, 90.0)
         changed, self.plot_box_azimuth = imgui.slider_float('方位角', self.plot_box_azimuth, -360.0, 360.0)
 
     def _register_custom_colormap(self, num_colors: int = 256):
@@ -202,7 +202,7 @@ class App:
                 implot3d.LegendFlags_.horizontal
             )
             implot3d.setup_box_rotation(
-                self.plot_box_elvation,
+                self.plot_box_elevation,
                 self.plot_box_azimuth,
                 True,
                 implot3d.Cond_.always

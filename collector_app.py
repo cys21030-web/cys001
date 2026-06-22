@@ -25,13 +25,13 @@ class CollectorApp(AppBase):
         
         # 初始化 ToF 傳感器驅動與採集狀態
         self.tof_sensor = ToFSensor()
-        self.input_label = 0
+        self.selected_label = 0
 
         # 用於追蹤各類別當前的採集樣本數與目標數量
-        self.snapshot_cnt = np.zeros((ToFDataLabel.label_cnts), dtype=np.int32)
-        self.snapshot_cnt_target = np.zeros((ToFDataLabel.label_cnts), dtype=np.int32)
-        self.snapshot_enabled = False
-        self.last_snapshot_frame = 0
+        self.sample_count = np.zeros((ToFDataLabel.label_cnts), dtype=np.int32)
+        self.target_count = np.zeros((ToFDataLabel.label_cnts), dtype=np.int32)
+        self.is_collecting = False
+        self.last_saved_frame = 0
         self.last_disp_frame = 0
 
         self.__win_title = "升降機平層誤差監察儀"
@@ -102,18 +102,19 @@ class CollectorApp(AppBase):
         imgui.label_text('狀態', self.tof_sensor.status)
         imgui.label_text('影格', f'{self.sensor_frame_cnt_valid:04d} / {self.sensor_frame_cnt_total:04d}')
 
-        imgui.separator_text("資料採集")
-        changed, tmp_input_label = imgui.combo(
+        imgui.separator_text("收集樣本")
+        imgui.text_wrapped("先選一個標籤，再按『開始採集』。系統會把資料存成一筆一筆的樣本。")
+        changed, new_label = imgui.combo(
             '標籤',
-            self.input_label,
+            self.selected_label,
             ToFDataLabel.combo_labels
         )
-        if changed and not self.snapshot_enabled:
-            self.input_label = tmp_input_label
+        if changed and not self.is_collecting:
+            self.selected_label = new_label
 
-        if self.snapshot_enabled:
+        if self.is_collecting:
             if imgui.button('停止採集'):
-                self.snapshot_enabled = False
+                self.is_collecting = False
         else:
             if imgui.button('開始採集'):
                 self.enable_snapshot()
@@ -122,32 +123,32 @@ class CollectorApp(AppBase):
 
         # 顯示當前已收集的各標籤檔案數量
         for idx in range(ToFDataLabel.label_cnts):
-            imgui.label_text(ToFDataLabel.labels[idx].name, f'{self.snapshot_cnt[idx]}')
+            imgui.label_text(ToFDataLabel.labels[idx].name, f'{self.sample_count[idx]}')
 
     def enable_snapshot(self):
         # 啟動自動批次採集，每次點擊預設自動採集 100 影格
-        self.snapshot_cnt_target[self.input_label] = self.snapshot_cnt[self.input_label] + 100
-        self.snapshot_enabled = True
+        self.target_count[self.selected_label] = self.sample_count[self.selected_label] + 100
+        self.is_collecting = True
 
     def snapshot(self):
         # 批次數據自動儲存，限制儲存影格間隔 (加入少量隨機因子防抖)，確保數據多樣性
-        if not self.snapshot_enabled:
+        if not self.is_collecting:
             return
         
-        if self.snapshot_cnt[self.input_label] >= self.snapshot_cnt_target[self.input_label]:
-            self.snapshot_enabled = False
+        if self.sample_count[self.selected_label] >= self.target_count[self.selected_label]:
+            self.is_collecting = False
             return
         
         if self.raw_data is None or self.cloud_points is None:
             return
         
-        if self.sensor_frame_cnt_valid <= self.last_snapshot_frame + random.randint(0, 3) * 5:
+        if self.sensor_frame_cnt_valid <= self.last_saved_frame + random.randint(0, 3) * 5:
             return
-        self.last_snapshot_frame = self.sensor_frame_cnt_valid
+        self.last_saved_frame = self.sensor_frame_cnt_valid
 
         now = datetime.now()
         now_str = now.strftime("%Y-%m-%d-%H-%M-%S.%f")[:-3]
-        label_name = ToFDataLabel.labels[self.input_label].name
+        label_name = ToFDataLabel.labels[self.selected_label].name
         output_name = f'{label_name}-{now_str}'
         output_dir = self.snapshot_dir / f'{label_name}'
 
@@ -155,7 +156,7 @@ class CollectorApp(AppBase):
             output_dir.mkdir(parents=True)
 
         self.save_raw_data(output_dir / f'{output_name}.dat')
-        self.snapshot_cnt[self.input_label] += 1
+        self.sample_count[self.selected_label] += 1
 
     def save_raw_data(self, filename: str = 'dat.dat') -> str:
         # 格式化輸出距離數據，寫入 .dat 檔案

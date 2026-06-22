@@ -4,8 +4,13 @@ from pathlib import Path
 from datetime import datetime
 import numpy as np
 
-import torch
-import torch.nn.functional as F
+try:
+    import torch
+    import torch.nn.functional as F
+except ImportError:  # pragma: no cover - depends on runtime environment
+    torch = None
+    F = None
+
 from imgui_bundle import imgui, hello_imgui, implot, implot3d
 
 from ai.ToFDataLabel import ToFDataLabel
@@ -36,12 +41,15 @@ class InferenceApp(AppBase):
         # 實時推論變量
         self.models_dir = Path('./models')
         self.model_files = []
-        self.selected_model_idx = -1
+        self.selected_model_index = -1
         self.model = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cpu"
+        if self.torch_available() and torch.cuda.is_available():
+            self.device = "cuda"
         
         self.probabilities = None
-        self.predicted_label_idx = -1
+        self.predicted_label_index = -1
+        self.model_error = None
         
         # 自動掃描本地已訓練模型
         self.scan_models()
@@ -105,14 +113,22 @@ class InferenceApp(AppBase):
         # 掃描 models 目錄下的所有 .pth 檔案 (包括子目錄)
         if self.models_dir.exists():
             self.model_files = sorted(list(self.models_dir.rglob("*.pth")), key=lambda p: p.name, reverse=True)
-            if self.model_files and self.selected_model_idx == -1:
-                self.selected_model_idx = 0
+            if self.model_files and self.selected_model_index == -1:
+                self.selected_model_index = 0
                 self.load_selected_model()
+
+    def torch_available(self):
+        return torch is not None and F is not None
 
     def load_selected_model(self):
         # 載入指定的 PyTorch 模型權重
-        if 0 <= self.selected_model_idx < len(self.model_files):
-            model_path = self.model_files[self.selected_model_idx]
+        if 0 <= self.selected_model_index < len(self.model_files):
+            model_path = self.model_files[self.selected_model_index]
+            self.model_error = None
+            if not self.torch_available():
+                self.model_error = "目前環境中沒有可用的 PyTorch，無法載入模型。"
+                self.model = None
+                return
             try:
                 # 載入權重並初始化分類網路
                 checkpoint = torch.load(model_path, map_location=self.device)
@@ -125,10 +141,11 @@ class InferenceApp(AppBase):
             except Exception as e:
                 logging.exception(f"模型載入失敗：{e}")
                 self.model = None
+                self.model_error = str(e)
 
     def run_inference(self):
         # 執行實時神經網路前向傳播與 softmax 置信度計算
-        if self.model is None or self.raw_data is None:
+        if self.model is None or self.raw_data is None or not self.torch_available():
             return
         
         try:
@@ -144,9 +161,28 @@ class InferenceApp(AppBase):
                 probs = F.softmax(logits, dim=1).cpu().numpy()[0]
                 
             self.probabilities = probs
-            self.predicted_label_idx = int(np.argmax(probs))
+            self.predicted_label_index = int(np.argmax(probs))
         except Exception as e:
             logging.exception(f"即時推論執行失敗：{e}")
+
+    def get_missing_model_message(self):
+        if self.model_error:
+            return self.model_error
+        if not self.torch_available():
+            return "目前環境中沒有可用的 PyTorch，請先安裝 PyTorch 後再啟動推論。"
+        return "目前沒有可用的模型檔案，請提供已預先訓練好的模型後再啟動推論。"
+
+    def get_prediction_summary(self):
+        if self.model is None:
+            return "尚未載入模型"
+        if self.probabilities is None:
+            return "正在等待資料"
+        if not 0 <= self.predicted_label_index < len(ToFDataLabel.labels):
+            return "尚未得到結果"
+
+        label_name = ToFDataLabel.labels[self.predicted_label_index].name
+        confidence = self.probabilities[self.predicted_label_index]
+        return f"{label_name}（{confidence * 100:.0f}%）"
 
     def gui_settings(self):
         super().gui_settings_plot_view()
@@ -161,16 +197,17 @@ class InferenceApp(AppBase):
             
         # 選擇模型下拉式選單
         imgui.separator_text("模型選擇")
+        imgui.text_wrapped("這裡會顯示目前最像哪一種情況。若還沒有模型，先收集資料再訓練一次即可。")
         self.scan_models() # 動態重新掃描
         
         if not self.model_files:
             imgui.text("./models/ 目錄中找不到任何模型。")
-            imgui.text("請先執行 tui_train.py 進行訓練。")
+            imgui.text_wrapped(self.get_missing_model_message())
         else:
             combo_labels = [str(f.relative_to(self.models_dir)) for f in self.model_files]
-            changed, new_idx = imgui.combo("模型", self.selected_model_idx, combo_labels)
+            changed, new_index = imgui.combo("模型", self.selected_model_index, combo_labels)
             if changed:
-                self.selected_model_idx = new_idx
+                self.selected_model_index = new_index
                 self.load_selected_model()
                 
         # 實時推論監察面板
@@ -180,55 +217,14 @@ class InferenceApp(AppBase):
         elif self.probabilities is None:
             imgui.text("正在等待即時感測器資料…")
         else:
-            # 配對標籤名稱、置信度與索引，以便事後排序
-            labeled_probs = [
-                (lbl.name, self.probabilities[lbl.index], lbl.index)
-                for lbl in ToFDataLabel.labels
-            ]
-            # 依據置信度分數進行「降序」排序
-            labeled_probs.sort(key=lambda x: x[1], reverse=True)
-            
-            # 使用動態臨界值公式 (1.5 * 1 / N)，當 N=3 時為 50% 臨界值
-            num_classes = len(ToFDataLabel.labels)
-            threshold = 1.5 * (1.0 / num_classes) if num_classes > 0 else 0.50
-            highest_prob = labeled_probs[0][1]
-            has_obvious_result = highest_prob >= threshold
-            
-            pred_label = ToFDataLabel.labels[self.predicted_label_idx].name
-            imgui.text_disabled("偵測狀態：")
-            imgui.same_line()
-            
-            # 如果有明顯結果，突顯當前預測狀態
-            if has_obvious_result:
-                if self.predicted_label_idx == 0:
-                    imgui.text_colored((0.12, 0.53, 0.22, 1.0), f"{pred_label}（良好）")
-                elif self.predicted_label_idx == 3:
-                    imgui.text_colored((0.3, 0.5, 0.35, 1.0), f"{pred_label}（無法判定）")
-                else:
-                    imgui.text_colored((0.0, 0.5, 0.35, 1.0), f"{pred_label}（注意）")
-            else:
-                imgui.text_colored((0.6, 0.6, 0.6, 1.0), "不確定 / 無明顯結果")
-                
+            imgui.text(f"目前判斷：{self.get_prediction_summary()}")
             imgui.spacing()
             imgui.separator()
             imgui.spacing()
-            
-            # 渲染已降序排序的置信度條，並依據置信度是否「明顯」套用綠色/灰色樣式
-            for rank, (name, prob, idx) in enumerate(labeled_probs):
-                if has_obvious_result:
-                    if rank == 0:
-                        text_color = (0.12, 0.53, 0.22, 1.0) # 第一名顯示為深綠色，提升與白字的對比度
-                        bar_color = (0.12, 0.53, 0.22, 1.0)   # 第一名置信度條顯示為深綠色，使內部白字清晰可見
-                    else:
-                        text_color = (0.6, 0.6, 0.6, 1.0) # 其他顯示為灰色
-                        bar_color = (0.6, 0.6, 0.6, 1.0)   # 其他置信度條顯示為灰色
-                else:
-                    text_color = (0.6, 0.6, 0.6, 1.0)     # 若無明顯結果，全數顯示為灰色
-                    bar_color = (0.6, 0.6, 0.6, 1.0)       # 若無明顯結果，全數置信度條顯示為灰色
-                
-                imgui.text_colored(text_color, f"{name:<12}")
+
+            for label in ToFDataLabel.labels:
+                probability = float(self.probabilities[label.index])
+                imgui.text(label.name)
                 imgui.same_line()
-                
-                imgui.push_style_color(imgui.Col_.plot_histogram, bar_color)
-                imgui.progress_bar(prob, (0.0, 0.0), f"{int(prob * 100)}%")
-                imgui.pop_style_color()
+                imgui.progress_bar(probability, (0.0, 0.0), f"{probability * 100:0.0f}%")
+                imgui.spacing()

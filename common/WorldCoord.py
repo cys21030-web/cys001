@@ -3,13 +3,20 @@ import json
 from common.ToFData import ToFData
 from common.ViewAngle import ViewAngle
 
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+try:
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+except ImportError:  # pragma: no cover - depends on runtime environment
+    plt = None
+    Axes3D = None
+
 import numpy as np
 
-from common.matplotlib_utils import configure_matplotlib_chinese
-
-configure_matplotlib_chinese()
+try:
+    from common.matplotlib_utils import configure_matplotlib_chinese
+    configure_matplotlib_chinese()
+except Exception:  # pragma: no cover - fallback for minimal environments
+    pass
 
 
 class WorldCoord:
@@ -42,6 +49,8 @@ class WorldCoord:
             
     def plot(self):
         # 使用 matplotlib 來繪製 3D 點雲
+        if plt is None:
+            return
         
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
