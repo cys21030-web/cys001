@@ -91,12 +91,12 @@ class CollectorApp(AppBase):
         imgui.separator_text("Sensor")
 
         if not self.sensor_ready:
-            imgui.text("ToF Sensor is not ready yet.")
+            imgui.text("ToF 感測器尚未就緒。")
             return
-        imgui.label_text('Status', self.tof_sensor.status)
-        imgui.label_text('Frames', f'{self.sensor_frame_cnt_valid:04d} / {self.sensor_frame_cnt_total:04d}')
+        imgui.label_text('狀態', self.tof_sensor.status)
+        imgui.label_text('影格', f'{self.sensor_frame_cnt_valid:04d} / {self.sensor_frame_cnt_total:04d}')
 
-        imgui.separator_text("Data collection")
+        imgui.separator_text("資料採集")
         changed, tmp_input_label = imgui.combo(
             '標籤',
             self.input_label,
@@ -106,10 +106,10 @@ class CollectorApp(AppBase):
             self.input_label = tmp_input_label
 
         if self.snapshot_enabled:
-            if imgui.button('stop snapshot'):
+            if imgui.button('停止採集'):
                 self.snapshot_enabled = False
         else:
-            if imgui.button('snapshot'):
+            if imgui.button('開始採集'):
                 self.enable_snapshot()
 
         imgui.separator()
@@ -153,7 +153,7 @@ class CollectorApp(AppBase):
 
     def save_raw_data(self, filename: str = 'dat.dat') -> str:
         # 格式化輸出距離數據，寫入 .dat 檔案
-        print(f"{len(self.raw_data)} data saved to {filename}")
+        print(f"已儲存 {len(self.raw_data)} 筆資料至 {filename}")
         with open(filename, "w") as f:
             for y in range(self.raw_data.shape[0]):
                 for x in range(self.raw_data.shape[1]):

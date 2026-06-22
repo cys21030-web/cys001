@@ -7,6 +7,11 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
+from common.matplotlib_utils import configure_matplotlib_chinese
+
+configure_matplotlib_chinese()
+
+
 class WorldCoord:
     """
     世界坐標系中的點，包含 x, y, z 三個坐標。
@@ -39,9 +44,9 @@ class WorldCoord:
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
         ax.scatter(self.xs, self.ys, self.zs)
-        ax.set_xlabel('X axis')
-        ax.set_ylabel('Y axis')
-        ax.set_zlabel('Z axis')
+        ax.set_xlabel('X 軸')
+        ax.set_ylabel('Y 軸')
+        ax.set_zlabel('Z 軸')
         plt.savefig('world_coordinates.png')
     
     def save(self, filename: str = 'world_coordinates.json'):

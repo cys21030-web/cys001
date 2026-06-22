@@ -72,7 +72,7 @@ class ToFData:
                                     
                     # 如果周圍沒有有效的距離值，則無法修復錯誤值，這裡可以選擇丟出異常或使用預設值
                     if cnt <= 0:
-                        raise Exception("No good data to repair")
+                        raise Exception("沒有可用的鄰域資料可供修復")
                         
                     # 使用周圍有效距離值的平均值來修復錯誤值
                     repaired_data[y1, x1] = sum / cnt
@@ -112,7 +112,7 @@ class ToFData:
             print()
 
     def save(self, filename: str = 'dat.dat') -> str:
-        print(f"{len(self.data)} data saved to {filename}")
+        print(f"已儲存 {len(self.data)} 筆資料至 {filename}")
         with open(filename, "w") as f:
             for y in range(self.repaired_data.shape[0]):
                 for x in range(self.repaired_data.shape[1]):

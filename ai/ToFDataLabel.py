@@ -9,6 +9,7 @@ class ToFDataLabel:
         Label(0, 'Normal'),
         Label(1, 'Upstair'),
         Label(2, 'Downstair'),
+        Label(3, 'Nothing'),
     ]
 
     label_cnts = len(labels)

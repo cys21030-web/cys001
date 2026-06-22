@@ -9,7 +9,7 @@ import threading
 class ToFSensor:
     def __init__(self, address: int = 0x33):
         self.address = address
-        self.status = "Uninitialized"
+        self.status = "尚未初始化"
         self.sensor = None
         self.last_raw_data = None
         # self.last_cloud_points = None
@@ -29,21 +29,21 @@ class ToFSensor:
         return self.sensor is not None
 
     def init_sensor(self):
-        logging.info("Initializing ToF Sensor...")
-        self.status = "Initializing"
+        logging.info("初始化 ToF 感測器...")
+        self.status = "初始化中"
         tmp_sensor = DFRobot_matrixLidar_i2c(self.address)
 
         while tmp_sensor.begin() != 0:
             time.sleep(0.333)
-        logging.info("Setting ranging mode.")
-        self.status = "Setting Ranging Mode"
+        logging.info("設定量測模式。")
+        self.status = "設定量測模式"
         
         while tmp_sensor.set_Ranging_Mode(8) != 0:
             time.sleep(0.333)
 
         self.sensor = tmp_sensor
-        self.status = "Ready"
-        logging.info("Lidar initialized successfully!")
+        self.status = "就緒"
+        logging.info("LiDAR 初始化成功！")
 
         self.fetch_thread = threading.Thread(
             target=self.__fetch,
@@ -52,11 +52,11 @@ class ToFSensor:
         self.fetch_thread.start()
 
     def __exit__(self, exc_type, exc, tb):
-        logging.info("Cleaning up ToF Sensor resources...")
+        logging.info("清理 ToF 感測器資源...")
         self.keep_running = False
         if self.fetch_thread:
             self.fetch_thread.join(timeout=1.0)
-        logging.info("ToF Sensor cleanup complete.")
+        logging.info("ToF 感測器清理完成。")
 
 
     def __fetch(self):

@@ -15,6 +15,13 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
+# OpenCV is required for video generation. Install it with `pip install opencv-python`.
+import cv2
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import colorsys
+
+from common.matplotlib_utils import configure_matplotlib_chinese
 from ai.ToFDataLabel import ToFDataLabel
 from common.ToFData import ToFData
 from training.sample import ToFSample
@@ -23,6 +30,7 @@ from ai.ToFTrainer import ToFClassifierModel
 
 # 設定系統日誌格式
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+configure_matplotlib_chinese()
 
 
 def clear_terminal():
@@ -37,7 +45,7 @@ def draw_header():
     繪製 TUI 應用程式主標頭。
     """
     print("=" * 70)
-    print("      ToF Lidar Classifier - Terminal Training System (TUI)")
+    print("      ToF 雷射感測分類器 - 終端訓練系統 (TUI)")
     print("=" * 70)
 
 
@@ -206,13 +214,16 @@ def evaluate_model(model: nn.Module, loader: DataLoader, criterion: nn.Module, d
     return avg_loss, accuracy
 
 
-def execute_training_session(model: nn.Module, train_loader: DataLoader, test_loader: DataLoader, criterion: nn.Module, optimizer: torch.optim.Optimizer, device: str, total_epochs: int) -> tuple[list[float], list[float], list[float], list[float], dict[str, list[float]]]:
+def execute_training_session(model: nn.Module, train_loader: DataLoader, test_loader: DataLoader, criterion: nn.Module, optimizer: torch.optim.Optimizer, device: str, total_epochs: int, output_dir: Path) -> tuple[list[float], list[float], list[float], list[float], dict[str, list[float]]]:
     """
     管理整場多 Epoch 的神經網路訓練工作流，並實時輸出進度條與統計指標。
     """
     train_losses, test_losses = [], []
     train_accuracies, test_accuracies = [], []
     layer_weights = {"Layer 1": [], "Layer 2": [], "Layer 3": []}
+    
+    frames_dir = output_dir / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"[*] 開始執行 {total_epochs} 個 Epoch 訓練...")
     print("=" * 70)
@@ -245,26 +256,123 @@ def execute_training_session(model: nn.Module, train_loader: DataLoader, test_lo
         bar = '█' * filled_length + '░' * (bar_length - filled_length)
         
         print(f"Epoch {epoch:>2}/{total_epochs} [{bar}] {int(progress_ratio*100):>3}% | "
-              f"Train Loss: {train_loss:.4f} | Acc: {train_acc*100:.1f}% | "
-              f"Test Loss: {val_loss:.4f} | Test Acc: {val_acc*100:.1f}%")
+              f"訓練損失: {train_loss:.4f} | 準確率: {train_acc*100:.1f}% | "
+              f"驗證損失: {val_loss:.4f} | 驗證準確率: {val_acc*100:.1f}%")
         
         if epoch % 10 == 0 or epoch == total_epochs:
             print(f"  -> 層參數平均值: Layer 1: {w1.mean():.4f} | Layer 2: {w2.mean():.4f} | Layer 3: {w3.mean():.4f}")
+
+        visualize_epoch(model, test_loader, device, epoch, frames_dir)
             
     print("=" * 70)
     print("[*] 模型神經網路訓練成功完成！")
     return train_losses, test_losses, train_accuracies, test_accuracies, layer_weights
 
+def get_label_name_from_index(index: int) -> str:
+    """
+    從索引獲取標籤名稱。
+    """
+    for label in ToFDataLabel.labels:
+        if label.index == index:
+            return label.name
+    return "Unknown"
 
-def save_training_artifacts(model: nn.Module, train_samples: list[ToFSample], test_samples: list[ToFSample], train_losses: list[float], test_losses: list[float], train_accuracies: list[float], test_accuracies: list[float], split_perc: float, timestamp: str) -> tuple[Path, Path]:
+def _generate_custom_colormap_mpl(num_colors: int = 256):
+    """
+    Generate a custom colormap from blue to red for Matplotlib.
+    """
+    colors = []
+    for i in range(num_colors):
+        hue = (240 - (i / (num_colors - 1)) * 240) / 360.0
+        rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+        colors.append(rgb)
+    return mcolors.LinearSegmentedColormap.from_list("custom_cmap", colors)
+
+def visualize_epoch(model: nn.Module, test_loader: DataLoader, device: str, epoch: int, output_dir: Path):
+    """
+    可視化一個 epoch 的預測結果。
+    """
+    model.eval()
+    features, labels = next(iter(test_loader))
+    features = features.to(device)
+    
+    with torch.no_grad():
+        logits = model(features.view(features.size(0), -1))
+        prediction = torch.argmax(logits, dim=1)[0].item()
+        
+    feature_image = features[0].cpu().numpy().reshape(8, 8)
+    true_label = get_label_name_from_index(labels[0].item())
+    pred_label = get_label_name_from_index(prediction)
+    
+    custom_cmap = _generate_custom_colormap_mpl()
+
+    fig, ax = plt.subplots()
+    ax.imshow(feature_image, cmap=custom_cmap, vmin=0.0, vmax=1.0)
+    ax.set_title(f"Epoch: {epoch}\n實際: {true_label}，預測: {pred_label}")
+    ax.axis('off')
+    
+    plt.savefig(output_dir / f"epoch_{epoch:04d}.png")
+    plt.close(fig)
+    model.train()
+
+def plot_training_stats(train_losses, test_losses, train_accuracies, test_accuracies, output_path: Path):
+    """
+    繪製訓練過程中的損失和準確率變化。
+    """
+    epochs = range(1, len(train_losses) + 1)
+    
+    plt.figure(figsize=(12, 5))
+    
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, train_losses, 'b-', label='訓練損失')
+    plt.plot(epochs, test_losses, 'r-', label='驗證損失')
+    plt.title('訓練與驗證損失')
+    plt.xlabel('Epoch')
+    plt.ylabel('損失')
+    plt.legend()
+    
+    plt.subplot(1, 2, 2)
+    plt.plot(epochs, train_accuracies, 'b-', label='訓練準確率')
+    plt.plot(epochs, test_accuracies, 'r-', label='驗證準確率')
+    plt.title('訓練與驗證準確率')
+    plt.xlabel('Epoch')
+    plt.ylabel('準確率')
+    plt.legend()
+    
+    plt.tight_layout()
+    plt.savefig(output_path)
+    plt.close()
+
+def create_video_from_frames(frames_dir: Path, output_video_path: Path, fps: int = 10):
+    """
+    從幀圖像序列創建視頻。
+    """
+    frame_files = sorted(frames_dir.glob("*.png"))
+    if not frame_files:
+        print("[警告] 找不到任何影格，無法建立影片。")
+        return
+        
+    frame = cv2.imread(str(frame_files[0]))
+    height, width, layers = frame.shape
+    
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    video = cv2.VideoWriter(str(output_video_path), fourcc, fps, (width, height))
+    
+    for frame_file in frame_files:
+        video.write(cv2.imread(str(frame_file)))
+        
+    video.release()
+    print(f"[*] 訓練進度視頻已保存至: {output_video_path}")
+
+
+def save_training_artifacts(model: nn.Module, train_samples: list[ToFSample], test_samples: list[ToFSample], train_losses: list[float], test_losses: list[float], train_accuracies: list[float], test_accuracies: list[float], split_perc: float, output_dir: Path, timestamp: str) -> tuple[Path, Path]:
     """
     將模型權重（.pth）與本次數據分割詳細歷程與對照（.yaml）序列化儲存至本地磁碟。
     """
-    models_dir = Path('./models')
-    models_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
     # 儲存 .pth 分類結構與權重檔
-    model_path = models_dir / f"model_{timestamp}.pth"
+    model_path = output_dir / f"model_{timestamp}.pth"
     payload = {
         "model_kwargs": model.config(),
         "state_dict": model.state_dict(),
@@ -272,7 +380,7 @@ def save_training_artifacts(model: nn.Module, train_samples: list[ToFSample], te
     torch.save(payload, model_path)
     
     # 儲存元數據 YAML 日誌
-    yaml_path = models_dir / f"model_{timestamp}.yaml"
+    yaml_path = output_dir / f"model_{timestamp}.yaml"
     yaml_data = {
         "timestamp": timestamp,
         "train_ratio": split_perc,
@@ -350,15 +458,28 @@ def main():
     
     # 執行模型訓練
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = Path(f'./models/training_{timestamp}')
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
     total_epochs = 300
     
     train_losses, test_losses, train_accuracies, test_accuracies, _ = execute_training_session(
-        model, train_loader, test_loader, criterion, optimizer, device, total_epochs
+        model, train_loader, test_loader, criterion, optimizer, device, total_epochs, output_dir
     )
-    
+
+    # 繪製訓練統計圖
+    stats_plot_path = output_dir / "training_stats.png"
+    plot_training_stats(train_losses, test_losses, train_accuracies, test_accuracies, stats_plot_path)
+    print(f"[*] 訓練統計圖已保存至: {stats_plot_path}")
+
+    # 從幀創建視頻
+    frames_dir = output_dir / "frames"
+    video_path = output_dir / "training_progress.mp4"
+    create_video_from_frames(frames_dir, video_path)
+
     # 儲存神經網絡與 YAML 元數據紀錄
     model_path, yaml_path = save_training_artifacts(
-        model, train_samples, test_samples, train_losses, test_losses, train_accuracies, test_accuracies, split_perc, timestamp
+        model, train_samples, test_samples, train_losses, test_losses, train_accuracies, test_accuracies, split_perc, output_dir, timestamp
     )
     
     # 輸出最終對照報告
@@ -366,4 +487,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        with open(".error.log", "w", encoding="utf-8") as f:
+            traceback.print_exc(file=f)
+        raise e

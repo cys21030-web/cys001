@@ -96,9 +96,9 @@ class InferenceApp(AppBase):
         self.cloud_points = WorldCoord(self.raw_data, self.tof_sensor.view_angle)
 
     def scan_models(self):
-        # 掃描 models 目錄下的所有 .pth 檔案
+        # 掃描 models 目錄下的所有 .pth 檔案 (包括子目錄)
         if self.models_dir.exists():
-            self.model_files = sorted(list(self.models_dir.glob("*.pth")), reverse=True)
+            self.model_files = sorted(list(self.models_dir.rglob("*.pth")), key=lambda p: p.name, reverse=True)
             if self.model_files and self.selected_model_idx == -1:
                 self.selected_model_idx = 0
                 self.load_selected_model()
@@ -115,9 +115,9 @@ class InferenceApp(AppBase):
                 self.model.load_state_dict(checkpoint["state_dict"])
                 self.model.to(self.device)
                 self.model.eval()
-                logging.info(f"Model loaded successfully: {model_path.name}")
+                logging.info(f"模型載入成功：{model_path.name}")
             except Exception as e:
-                logging.exception(f"Error loading model: {e}")
+                logging.exception(f"模型載入失敗：{e}")
                 self.model = None
 
     def run_inference(self):
@@ -140,39 +140,39 @@ class InferenceApp(AppBase):
             self.probabilities = probs
             self.predicted_label_idx = int(np.argmax(probs))
         except Exception as e:
-            logging.exception(f"Error running inference: {e}")
+            logging.exception(f"即時推論執行失敗：{e}")
 
     def gui_settings(self):
         super().gui_settings_plot_view()
         
         # 傳感器狀態面版
-        imgui.separator_text("Sensor Status")
+        imgui.separator_text("感測器狀態")
         if not self.sensor_ready:
-            imgui.text("ToF Sensor is not ready yet.")
+            imgui.text("ToF 感測器尚未就緒。")
         else:
-            imgui.label_text('Status', self.tof_sensor.status)
-            imgui.label_text('Frames', f'{self.sensor_frame_cnt_valid:04d} / {self.sensor_frame_cnt_total:04d}')
+            imgui.label_text('狀態', self.tof_sensor.status)
+            imgui.label_text('影格', f'{self.sensor_frame_cnt_valid:04d} / {self.sensor_frame_cnt_total:04d}')
             
         # 選擇模型下拉式選單
-        imgui.separator_text("Model Selection")
+        imgui.separator_text("模型選擇")
         self.scan_models() # 動態重新掃描
         
         if not self.model_files:
-            imgui.text("No models found inside `./models/`.")
-            imgui.text("Please run `tui_train.py` first.")
+            imgui.text("./models/ 目錄中找不到任何模型。")
+            imgui.text("請先執行 tui_train.py 進行訓練。")
         else:
-            combo_labels = [f.name for f in self.model_files]
-            changed, new_idx = imgui.combo("Model", self.selected_model_idx, combo_labels)
+            combo_labels = [str(f.relative_to(self.models_dir)) for f in self.model_files]
+            changed, new_idx = imgui.combo("模型", self.selected_model_idx, combo_labels)
             if changed:
                 self.selected_model_idx = new_idx
                 self.load_selected_model()
                 
         # 實時推論監察面板
-        imgui.separator_text("Inference Panel")
+        imgui.separator_text("即時推論面板")
         if self.model is None:
-            imgui.text("No classifier model currently loaded.")
+            imgui.text("目前尚未載入分類模型。")
         elif self.probabilities is None:
-            imgui.text("Awaiting live sensor stream...")
+            imgui.text("正在等待即時感測器資料…")
         else:
             # 配對標籤名稱、置信度與索引，以便事後排序
             labeled_probs = [
@@ -189,19 +189,19 @@ class InferenceApp(AppBase):
             has_obvious_result = highest_prob >= threshold
             
             pred_label = ToFDataLabel.labels[self.predicted_label_idx].name
-            imgui.text_disabled("Detected State:")
+            imgui.text_disabled("偵測狀態：")
             imgui.same_line()
             
             # 如果有明顯結果，突顯當前預測狀態
             if has_obvious_result:
                 if self.predicted_label_idx == 0:
-                    imgui.text_colored((0.0, 1.0, 0.0, 1.0), f"{pred_label} (Normal)")
-                elif self.predicted_label_idx == 1:
-                    imgui.text_colored((1.0, 0.8, 0.0, 1.0), f"{pred_label} (Upstairs)")
+                    imgui.text_colored((0.12, 0.53, 0.22, 1.0), f"{pred_label}（良好）")
+                elif self.predicted_label_idx == 3:
+                    imgui.text_colored((0.3, 0.5, 0.35, 1.0), f"{pred_label}（無法判定）")
                 else:
-                    imgui.text_colored((1.0, 0.4, 0.0, 1.0), f"{pred_label} (Downstairs)")
+                    imgui.text_colored((0.0, 0.5, 0.35, 1.0), f"{pred_label}（注意）")
             else:
-                imgui.text_colored((0.6, 0.6, 0.6, 1.0), "Uncertain / No Obvious Result")
+                imgui.text_colored((0.6, 0.6, 0.6, 1.0), "不確定 / 無明顯結果")
                 
             imgui.spacing()
             imgui.separator()
@@ -211,8 +211,8 @@ class InferenceApp(AppBase):
             for rank, (name, prob, idx) in enumerate(labeled_probs):
                 if has_obvious_result:
                     if rank == 0:
-                        text_color = (0.0, 1.0, 0.0, 1.0) # 第一名顯示為綠色
-                        bar_color = (0.0, 1.0, 0.0, 1.0)   # 第一名置信度條顯示為綠色
+                        text_color = (0.12, 0.53, 0.22, 1.0) # 第一名顯示為深綠色，提升與白字的對比度
+                        bar_color = (0.12, 0.53, 0.22, 1.0)   # 第一名置信度條顯示為深綠色，使內部白字清晰可見
                     else:
                         text_color = (0.6, 0.6, 0.6, 1.0) # 其他顯示為灰色
                         bar_color = (0.6, 0.6, 0.6, 1.0)   # 其他置信度條顯示為灰色

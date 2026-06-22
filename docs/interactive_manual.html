@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>電梯平水與 Lidar 分類監察系統 - 互動式說明文件</title>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --primary: #1f4e79;
+      --secondary: #2f7ed8;
+      --accent: #2e8b57;
+      --warning: #c96f00;
+      --border: #d9e2ec;
+      --text: #22313f;
+      --muted: #64748b;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Microsoft JhengHei", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    header {
+      background: linear-gradient(135deg, var(--primary), var(--secondary));
+      color: white;
+      padding: 2.2rem 1.2rem;
+      box-shadow: 0 6px 18px rgba(0,0,0,.12);
+    }
+    header h1 { margin: 0 0 .3rem; font-size: 2rem; }
+    header p { margin: 0; opacity: .95; }
+
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 1rem 1rem 2rem; }
+    .hero-card, .panel, .step-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, .06);
+      padding: 1.1rem 1.2rem;
+      margin-bottom: 1rem;
+    }
+
+    .nav { display: flex; flex-wrap: wrap; gap: .6rem; margin: 1rem 0; }
+    .nav button, .pill {
+      border: 0;
+      background: #e8f1fb;
+      color: var(--primary);
+      padding: .6rem .9rem;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .nav button.active {
+      background: var(--primary);
+      color: white;
+    }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: .8rem; }
+    .card { background: #f8fbff; border: 1px solid var(--border); border-radius: 12px; padding: .9rem; }
+    .card h3 { margin-top: 0; margin-bottom: .4rem; color: var(--secondary); }
+
+    .flow {
+      display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; justify-content: center;
+      padding: 1rem 0;
+    }
+    .flow .box {
+      background: linear-gradient(135deg, #eef7ff, #f6fbff);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: .8rem 1rem;
+      min-width: 180px; text-align: center; font-weight: 600;
+    }
+    .flow .arrow { color: var(--secondary); font-size: 1.3rem; font-weight: 700; }
+
+    .tabs { display: none; }
+    .tabs.active { display: block; }
+
+    .accordion { border: 1px solid var(--border); border-radius: 10px; margin-top: .7rem; overflow: hidden; }
+    .accordion button {
+      width: 100%; text-align: left; padding: .85rem 1rem; border: 0; background: #f8fbff; font-size: 1rem; font-weight: 700; color: var(--primary); cursor: pointer;
+    }
+    .accordion .content { display: none; padding: 0 1rem 1rem; }
+    .accordion.open .content { display: block; }
+
+    code, pre {
+      font-family: Consolas, "Courier New", monospace;
+    }
+    code { background: #eef5ff; padding: .15rem .35rem; border-radius: 4px; }
+    pre {
+      background: #0f172a; color: #f8fafc; padding: 1rem; border-radius: 12px; overflow-x: auto;
+      font-size: .95rem;
+    }
+
+    ul { padding-left: 1.2rem; }
+    li { margin-bottom: .4rem; }
+
+    .checklist { display: grid; gap: .5rem; }
+    .checklist label { display: flex; gap: .6rem; align-items: center; background: #fcfeff; border: 1px solid var(--border); border-radius: 10px; padding: .7rem .8rem; }
+    .checklist input { accent-color: var(--accent); }
+    .progress { margin-top: .7rem; font-weight: 700; color: var(--accent); }
+
+    table { width: 100%; border-collapse: collapse; margin-top: .7rem; }
+    th, td { border: 1px solid var(--border); padding: .7rem; text-align: left; }
+    th { background: #f8fbff; }
+
+    .badge { display: inline-block; padding: .23rem .55rem; border-radius: 999px; background: #ecfdf3; color: #166534; font-size: .8rem; font-weight: 700; }
+    .warning { color: var(--warning); font-weight: 700; }
+
+    footer { text-align: center; color: var(--muted); padding: 1.2rem 0 2rem; font-size: .95rem; }
+    @media (max-width: 768px) { .flow { flex-direction: column; } .flow .arrow { transform: rotate(90deg); } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>電梯平水與 Lidar 分類監察系統</h1>
+      <p>繁體中文互動式說明文件：系統架構、資料流程、訓練流程與即時推論</p>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <section class="hero-card">
+      <div class="nav">
+        <button class="active" data-target="overview">系統總覽</button>
+        <button data-target="structure">架構說明</button>
+        <button data-target="training">訓練流程</button>
+        <button data-target="inference">推論流程</button>
+        <button data-target="runbook">執行手冊</button>
+      </div>
+
+      <div class="flow">
+        <div class="box">感測器擷取</div>
+        <div class="arrow">→</div>
+        <div class="box">資料清理與轉換</div>
+        <div class="arrow">→</div>
+        <div class="box">標記與儲存</div>
+        <div class="arrow">→</div>
+        <div class="box">模型訓練</div>
+        <div class="arrow">→</div>
+        <div class="box">即時推論</div>
+      </div>
+    </section>
+
+    <section id="overview" class="tabs active">
+      <div class="panel">
+        <h2>一、 系統總覽</h2>
+        <p>本系統整合了 <strong>8x8 矩陣雷達</strong>、<strong>PyTorch 神經網路</strong>與 <strong>互動式 GUI / TUI</strong>，用於監測電梯在不同物理狀態下的距離特徵，例如正常、上樓、下樓與無事件。系統可分為三個主要階段：資料採集、模型訓練與即時推論。</p>
+        <div class="grid">
+          <div class="card">
+            <h3>資料採集</h3>
+            <p>由感測器取得原始距離資料，建立 8×8 特徵矩陣，並透過標記後存為訓練樣本。</p>
+          </div>
+          <div class="card">
+            <h3>模型訓練</h3>
+            <p>使用簡化三層全連接網路，對資料進行 stratified 切分、訓練與輸出模型與統計圖。</p>
+          </div>
+          <div class="card">
+            <h3>即時推論</h3>
+            <p>從最新感測器資料做預處理與展平後輸入模型，輸出每個類別的機率分布與判定結果。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="structure" class="tabs">
+      <div class="panel">
+        <h2>二、 專案結構說明</h2>
+        <table>
+          <thead>
+            <tr><th>位置</th><th>角色</th><th>說明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>app_main.py</code></td><td>主入口</td><td>設定環境變數、啟動主介面，提供模式切換入口。</td></tr>
+            <tr><td><code>AppBase.py</code></td><td>共用基礎介面</td><td>提供熱力圖、3D 點雲、視角控制與共用 UI 基礎組件。</td></tr>
+            <tr><td><code>collector_app.py</code></td><td>採集模式</td><td>連線感測器、顯示即時資料、儲存帶標記的 .dat 樣本。</td></tr>
+            <tr><td><code>inference_app.py</code></td><td>推論模式</td><td>載入模型、執行即時預測、顯示機率與結果。</td></tr>
+            <tr><td><code>tui_train.py</code></td><td>訓練流程</td><td>掃描 snapshot、分割資料、訓練模型、輸出模型與圖像報表。</td></tr>
+            <tr><td><code>ai/</code></td><td>AI 模組</td><td>包含標籤定義與模型訓練邏輯。</td></tr>
+            <tr><td><code>common/</code></td><td>共用資料結構</td><td>包含 ToFData、ToFSensor、ViewAngle、WorldCoord 等資料處理元件。</td></tr>
+            <tr><td><code>training/</code></td><td>訓練資料結構</td><td>定義資料集與樣本物件。</td></tr>
+            <tr><td><code>snapshot/</code></td><td>採集資料</td><td>以類別資料夾儲存來自不同場景的 .dat 樣本。</td></tr>
+            <tr><td><code>models/</code></td><td>模型輸出</td><td>儲存訓練後的 .pth、.yaml 與訓練統計圖。</td></tr>
+          </tbody>
+        </table>
+
+        <div class="accordion open">
+          <button type="button">資料流程（點此展開）</button>
+          <div class="content">
+            <ol>
+              <li>感測器取得 8x8 的原始距離矩陣。</li>
+              <li>資料經由 <code>ToFData</code> 做修復與正規化。</li>
+              <li>再由 <code>WorldCoord</code> 將距離值映射為 3D 點雲。</li>
+              <li>採集模式將資料與標籤保存至 <code>snapshot/</code>。</li>
+              <li>訓練流程讀取樣本並訓練分類模型。</li>
+              <li>推論模式將最新資料送入模型，顯示各類別機率。</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="training" class="tabs">
+      <div class="panel">
+        <h2>三、 訓練流程說明</h2>
+        <p>訓練流程以純終端機 TUI 形式執行，減少圖形介面與 PyTorch 訓練在同一環境中互相衝突的風險。</p>
+
+        <div class="accordion open">
+          <button type="button">訓練流程步驟</button>
+          <div class="content">
+            <ol>
+              <li>執行 <code>python3 tui_train.py</code>。</li>
+              <li>掃描 <code>snapshot/</code> 中的各類別樣本。</li>
+              <li>依序輸入訓練集比例（預設 50%）。</li>
+              <li>進行 stratified 切分與隨機打散。</li>
+              <li>建立 3 層全連接網路，輸入向量為 64 維（8x8 展平）。</li>
+              <li>每個 epoch 都會輸出訓練/驗證損失與準確率。</li>
+              <li>產生模型檔案與訓練統計圖表。</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <button type="button">模型設定（點此展開）</button>
+          <div class="content">
+            <ul>
+              <li>輸入維度：64（8 × 8 矩陣）</li>
+              <li>隱藏層：64 → 64</li>
+              <li>輸出類別：對應標籤數量</li>
+              <li>激活函數：ReLU</li>
+              <li>損失函數：CrossEntropyLoss</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <button type="button">輸出物件（點此展開）</button>
+          <div class="content">
+            <ul>
+              <li><code>.pth</code>：模型權重與設定參數</li>
+              <li><code>.yaml</code>：訓練摘要、樣本數與分割資訊</li>
+              <li><code>training_stats.png</code>：訓練曲線圖</li>
+              <li><code>frames/</code>：每個 epoch 的可視化結果圖片</li>
+              <li><code>training_progress.mp4</code>：由影格組成的訓練動畫影片</li>
+            </ul>
+          </div>
+        </div>
+
+        <pre>[*] 開始執行 300 個 Epoch 訓練...
+Epoch  1/300 [█░░░░░░░░░░░░░░░░░░░]   0% | 訓練損失: 1.09 | 準確率: 33.3% | 驗證損失: 1.05 | 驗證準確率: 50.0%
+...
+Epoch 300/300 [████████████████████] 100% | 訓練損失: 0.01 | 準確率: 99.5% | 驗證損失: 0.01 | 驗證準確率: 100.0%</pre>
+      </div>
+    </section>
+
+    <section id="inference" class="tabs">
+      <div class="panel">
+        <h2>四、 推論流程說明</h2>
+        <p>推論模式會載入最新訓練完成的模型，對即時感測資料進行預處理與分類，並將結果以可讀方式呈現。</p>
+
+        <div class="accordion open">
+          <button type="button">推論流程</button>
+          <div class="content">
+            <ol>
+              <li>啟動主應用程式：<code>python3 app_main.py</code>。</li>
+              <li>在主選單切換到「實時數據分析」模式。</li>
+              <li>系統自動掃描 <code>models/</code> 中的模型。</li>
+              <li>選擇對應模型後，開始接收感測器資料。</li>
+              <li>每個新資料幀都會被展平並送入模型。</li>
+              <li>使用 Softmax 取得各類別機率，並顯示最高置信度結果。</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="accordion">
+          <button type="button">判定邏輯（點此展開）</button>
+          <div class="content">
+            <p>系統會依據機率分數判斷是否為明顯結果：若最高類別機率至少達到動態閾值，則以高亮方式顯示；否則顯示為不確定結果。</p>
+            <p class="warning">當分類結果不明確時，介面會以灰色條狀顯示，避免誤導使用者。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="runbook" class="tabs">
+      <div class="panel">
+        <h2>五、 執行手冊與建議流程</h2>
+
+        <div class="step-card">
+          <h3>1. 採集資料</h3>
+          <ol>
+            <li>啟動主視窗後切換到採集模式。</li>
+            <li>選擇標籤，例如「正常」、「上樓」、「下樓」或「無事件」。</li>
+            <li>點擊開始採集，等待資料指標增加。</li>
+            <li>數據會存入 <code>snapshot/</code> 下對應資料夾。</li>
+          </ol>
+        </div>
+
+        <div class="step-card">
+          <h3>2. 訓練模型</h3>
+          <ol>
+            <li>確認 <code>snapshot/</code> 中有足夠多樣樣本。</li>
+            <li>執行 <code>python3 tui_train.py</code>。</li>
+            <li>依據需求輸入訓練/測試分割比例。</li>
+            <li>等待模型輸出。</li>
+          </ol>
+        </div>
+
+        <div class="step-card">
+          <h3>3. 進行推論</h3>
+          <ol>
+            <li>啟動 <code>python3 app_main.py</code>。</li>
+            <li>切換到即時推論模式。</li>
+            <li>在模型清單中選擇最新產生的模型。</li>
+            <li>監看各類別機率與目前狀態。</li>
+          </ol>
+        </div>
+
+        <div class="step-card">
+          <h3>4. 建議檢查清單</h3>
+          <div class="checklist">
+            <label><input type="checkbox" data-target="sample"> 已確認至少有數個不同類別樣本</label>
+            <label><input type="checkbox" data-target="model"> 已完成模型訓練並產出 <code>.pth</code> 檔案</label>
+            <label><input type="checkbox" data-target="sensor"> 感測器已就緒，資料流穩定</label>
+            <label><input type="checkbox" data-target="view"> 已檢查熱力圖與點雲是否正常顯示</label>
+          </div>
+          <div class="progress" id="progressText">完成進度：0 / 4</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <footer>
+    這份文件位於 <code>docs/interactive_manual.html</code>，可直接使用瀏覽器開啟。<br />
+    建議搭配實際硬體與模型輸出檔案一同參閱。
+  </footer>
+
+  <script>
+    const navButtons = document.querySelectorAll('.nav button');
+    const tabs = document.querySelectorAll('.tabs');
+    navButtons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        navButtons.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        tabs.forEach(tab => tab.classList.remove('active'));
+        const target = document.getElementById(btn.dataset.target);
+        if (target) target.classList.add('active');
+      });
+    });
+
+    document.querySelectorAll('.accordion > button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const wrap = btn.parentElement;
+        wrap.classList.toggle('open');
+      });
+    });
+
+    const checkboxes = document.querySelectorAll('.checklist input');
+    const progressText = document.getElementById('progressText');
+    const updateProgress = () => {
+      const done = [...checkboxes].filter(cb => cb.checked).length;
+      progressText.textContent = `完成進度：${done} / ${checkboxes.length}`;
+    };
+    checkboxes.forEach(cb => cb.addEventListener('change', updateProgress));
+    updateProgress();
+  </script>
+</body>
+</html>

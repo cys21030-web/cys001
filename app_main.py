@@ -14,12 +14,12 @@ from inference_app import InferenceApp
 
 # 定義應用程式支援的運作模式 (移除了不穩定的 GUI 訓練模式，改為純 TUI 終端訓練)
 class AppMode(enum.Enum):
-    COLLECTOR = "數據採集器"
-    INFERENCE = "實時數據推論"
+    COLLECTOR = "數據採集"
+    INFERENCE = "實時數據分析"
 
 class MainApp:
     def __init__(self):
-        logging.info("Initializing MainApp")
+        logging.info("初始化主應用程式")
         
         # 初始化 ImGui、ImPlot 與 ImPlot3D 上下文，確保繪圖組件正常運作
         self.ctx_imgui = imgui.get_current_context()
@@ -46,12 +46,12 @@ class MainApp:
         try:
             io.fonts.add_font_from_file_ttf(font_path, font_size, None)
         except Exception:
-            print(f"Warning: Could not load font from {font_path}")
+            print(f"警告：無法載入字型 {font_path}")
 
     def gui_menu(self):
         # 繪製主選單列，供使用者在數據採集器與實時推論監察模式之間自由切換
         if imgui.begin_main_menu_bar():
-            if imgui.begin_menu("運作模式選項 (Mode)", True):
+            if imgui.begin_menu("運作模式 (Mode)", True):
                 # 數據採集模式切換
                 clicked_collector, _ = imgui.menu_item(
                     AppMode.COLLECTOR.value, "", self.app_mode == AppMode.COLLECTOR
@@ -106,19 +106,19 @@ class MainApp:
 
         # 註冊點雲圖、熱力圖與參數設定視窗（轉換標題為繁體中文）
         w_3dplot = hello_imgui.DockableWindow(
-            label_ = '三維空間點雲圖 (3D Point Cloud)',
+            label_ = '三維空間點雲圖',
             dock_space_name_ = 'BottomSpace',
             gui_function_ = self.gui_3d_plot
         )
         
         w_heatmap = hello_imgui.DockableWindow(
-            label_ = '實時距離二維熱力圖 (Raw Heatmap)',
+            label_ = '距離熱力圖',
             dock_space_name_ = 'MainDockSpace',
             gui_function_ = self.gui_heat_map
         )
 
         w_settings = hello_imgui.DockableWindow(
-            label_ = '控制參數與推論面板 (Control Settings)',
+            label_ = '參數控制',
             dock_space_name_ = 'LeftSpace',
             gui_function_ = self.gui_settings
         )
@@ -140,7 +140,7 @@ class MainApp:
         runner_params = hello_imgui.RunnerParams()
 
         runner_params.callbacks.show_gui = self.gui
-        runner_params.app_window_params.window_title = "電梯平水與Lidar分類監察系統"
+        runner_params.app_window_params.window_title = "電梯平水監察系統"
         runner_params.app_window_params.window_geometry.size = (1280, 960)
         runner_params.app_window_params.restore_previous_geometry = True
         runner_params.callbacks.load_additional_fonts = self.load_custom_fonts
@@ -161,4 +161,10 @@ def main():
     app.run()
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        with open(".error.log", "w", encoding="utf-8") as f:
+            traceback.print_exc(file=f)
+        raise e

@@ -2,6 +2,7 @@
 from imgui_bundle import imgui, hello_imgui, implot, implot3d
 import logging
 from ai.ToFDataLabel import ToFDataLabel
+from common.ToFData import ToFData
 from common.ToFSensor import ToFSensor
 from datetime import datetime
 from pathlib import Path
@@ -9,11 +10,11 @@ import math
 import numpy as np
 from common.WorldCoord import WorldCoord
 import random
-
+import colorsys
 
 class App:
     def __init__(self):
-        logging.info("Initializing App")
+        logging.info("初始化應用程式")
         
         # 設置基礎的 ImGui 與 ImPlot / ImPlot3D 記憶體上下文，保證渲染正常
         self.ctx_imgui = imgui.get_current_context()
@@ -44,6 +45,9 @@ class App:
         self.__frame_cnt_total = 0
         self.__frame_cnt_valid = 0
         self.snapshot_dir = Path('./snapshot')
+
+        # Generate and register the custom colormap
+        self.custom_colormap_id = self._register_custom_colormap()
 
     @property
     def win_title(self):
@@ -82,11 +86,11 @@ class App:
         imgui.set_current_context(self.ctx_imgui)
         io = imgui.get_io()
         font_path = "LXGWWenKaiMonoTC-Regular.ttf" 
-        font_size = 18.0
+        font_size = 20.0
         try:
             io.fonts.add_font_from_file_ttf(font_path, font_size, None)
         except Exception:
-            print(f"Warning: Could not load font from {font_path}")
+            print(f"警告：無法載入字型 {font_path}")
 
     def config_docking(self) -> hello_imgui.DockingParams:
         # 子模式的預設視窗佈局設定
@@ -108,7 +112,7 @@ class App:
 
         # 註冊點雲圖、熱力圖與參數設定視窗
         w_3dplot = hello_imgui.DockableWindow(
-            label_ = 'Point cloud',
+            label_ = '點雲圖',
             dock_space_name_ = 'BottomSpace',
             gui_function_ = self.gui_3d_plot,
             is_visible_ = True,
@@ -116,7 +120,7 @@ class App:
         )
         
         w_heatmap = hello_imgui.DockableWindow(
-            label_ = 'Raw Data',
+            label_ = '原始距離資料',
             dock_space_name_ = 'MainDockSpace',
             gui_function_ = self.gui_heat_map,
             is_visible_ = True,
@@ -124,7 +128,7 @@ class App:
         )
 
         w_settings = hello_imgui.DockableWindow(
-            label_ = 'Settings',
+            label_ = '設定',
             dock_space_name_ = 'LeftSpace',
             gui_function_ = self.gui_settings,
             is_visible_ = True,
@@ -150,13 +154,25 @@ class App:
 
     def gui_settings_plot_view(self):
         # 繪製傳感器方向滑動條與點雲觀察參數
-        imgui.separator_text('Sensor Orientation')
-        changed, self.view_angle = imgui.slider_float("View Angle", self.view_angle, 0.0, 120.0)
-        changed, self.sensor_pitch = imgui.slider_float("Sensor Pitch", self.sensor_pitch, -360, 360.0)
+        imgui.separator_text('感測器方向')
+        changed, self.view_angle = imgui.slider_float("視角", self.view_angle, 0.0, 120.0)
+        changed, self.sensor_pitch = imgui.slider_float("感測器俯仰角", self.sensor_pitch, -360, 360.0)
 
-        imgui.separator_text('3D Plot')
-        changed, self.plot_box_elvation = imgui.slider_float('Elevation', self.plot_box_elvation, -90.0, 90.0)
-        changed, self.plot_box_azimuth = imgui.slider_float('Azimuth', self.plot_box_azimuth, -360.0, 360.0)
+        imgui.separator_text('3D 圖表')
+        changed, self.plot_box_elvation = imgui.slider_float('仰角', self.plot_box_elvation, -90.0, 90.0)
+        changed, self.plot_box_azimuth = imgui.slider_float('方位角', self.plot_box_azimuth, -360.0, 360.0)
+
+    def _register_custom_colormap(self, num_colors: int = 256):
+        """
+        Generate and register a custom colormap from blue to red.
+        """
+        colors = []
+        for i in range(num_colors):
+            hue = (240 - (i / (num_colors - 1)) * 240) / 360.0
+            rgb = colorsys.hsv_to_rgb(hue, 1.0, 1.0)
+            colors.append((rgb[0], rgb[1], rgb[2], 1.0))
+        
+        return implot.add_colormap("custom_colormap", np.array(colors, dtype=np.float32), qual=False)
 
     def gui_heat_map(self):
         # 繪製 2D 距離熱力圖 (Heatmap)
@@ -164,21 +180,23 @@ class App:
             return
         
         if self.raw_data is not None:
-            if implot.begin_plot("Raw Data"):
+            implot.push_colormap(self.custom_colormap_id)
+            if implot.begin_plot("原始距離資料"):
                 implot.setup_legend(implot.Location_.east, implot.LegendFlags_.outside)
                 implot.plot_heatmap(
-                    "Raw Data",
+                    "原始距離資料",
                     self.raw_data,
-                    0.0,
-                    2500.0,
+                    float(ToFData.min_valid),
+                    float(ToFData.max_valid),
                     bounds_min = (0, 0),
                     bounds_max = (1.0, 1.0)
                 )
             implot.end_plot()
+            implot.pop_colormap()
     
     def gui_3d_plot(self):
         # 繪製 3D 立體點雲映射圖 (3D Scatter Plot)
-        if implot3d.begin_plot("Point Cloud"):
+        if implot3d.begin_plot("點雲圖"):
             implot3d.setup_legend(
                 implot3d.Location_.east,
                 implot3d.LegendFlags_.horizontal
@@ -189,7 +207,7 @@ class App:
                 True,
                 implot3d.Cond_.always
             )
-            implot3d.setup_axes("X", "Y", "Z")
+            implot3d.setup_axes("X 軸", "Y 軸", "Z 軸")
             implot3d.setup_box_scale(1.0, 2.0, 1.0)
             implot3d.setup_axes_limits(-80.0, 80.0, 25.0, -250.0, -250.0, 50.0)
             if self.cloud_points is not None:
@@ -203,7 +221,7 @@ class App:
 
     def save_raw_data(self, filename: str = 'dat.dat') -> str:
         # 格式化儲存 Lidar 數據
-        print(f"{len(self.raw_data)} data saved to {filename}")
+        print(f"已儲存 {len(self.raw_data)} 筆資料至 {filename}")
         with open(filename, "w") as f:
             for y in range(self.raw_data.shape[0]):
                 for x in range(self.raw_data.shape[1]):
