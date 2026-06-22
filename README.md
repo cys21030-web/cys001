@@ -69,13 +69,13 @@
 
 ## 使用方式
 
-### 1. 安裝依賴
+### 1. 安裝所需套件
 
 ```bash
 python3 -m pip install -r requirements.txt
 ```
 
-### 2. 採集資料
+### 2. 收集數據
 
 ```bash
 python3 app_main.py
@@ -95,7 +95,7 @@ python3 tui_train.py
 - 輸入訓練集比例後開始訓練
 - 會輸出模型與簡單統計圖到 `models/`
 
-### 4. 進行推論
+### 4. 進行測試和偵測
 
 ```bash
 python3 app_main.py
